@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Use this script to down one or more Akka cluster nodes. The command line parameters must be from 1 to 9.
+
+usage() {
+  echo "Usage: $0 nodes - Down cluster nodes, node numbers must be 1 through 9." ; exit 1
+}
+
+downNode() {
+  mgmtPort="855"$1
+  node=$2
+  nodePort="255"$node
+
+  httpStatus=$(curl --write-out %{http_code} --max-time 5 --silent --output /dev/null http://localhost:"$mgmtPort"/cluster/members)
+
+  if [[ $httpStatus == 200 ]] ; then
+    echo "Down node $node on port $nodePort via Akka management port $mgmtPort"
+    curl --silent -X PUT -F "operation=Down" http://localhost:"$mgmtPort"/cluster/members/cluster@127.0.0.1:"$nodePort" --output /dev/null
+    exit
+  fi
+}
+
+[ $# -eq 0 ] && usage
+
+while [[ $# -gt 0 ]]; do
+  node=$1
+  shift
+
+  if [[ $node =~ ^[1-9]$ ]] ; then
+    for i in $(seq 9) ; do downNode "$i" "$node" ; done
+  else
+    echo "Cluster node number $node is invalid. The node number must be 1 through 9."
+    usage
+  fi
+done
