@@ -1,4 +1,6 @@
 ## Akka Java Cluster Aware Example
+> **WARNING**: This README needs extensive modifications. 
+> **WARNING**: The current contents are not relevant to this project.  
 
 ### Introduction
 
