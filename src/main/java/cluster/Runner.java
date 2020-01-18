@@ -1,13 +1,12 @@
 package cluster;
 
-import java.util.Arrays;
-import java.util.List;
-
+import akka.actor.typed.ActorSystem;
 import akka.management.javadsl.AkkaManagement;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
-import akka.actor.typed.ActorSystem;
+import java.util.Arrays;
+import java.util.List;
 
 public class Runner {
     public static void main(String[] args) {
@@ -24,14 +23,24 @@ public class Runner {
         ports.forEach(port -> {
             ActorSystem<Void> actorSystem = ActorSystem.create(Main.create(), "cluster", setupClusterNodeConfig(port));
             AkkaManagement.get(actorSystem.classicSystem()).start();
+//            serviceDiscovery(actorSystem);
             HttpServer.start(actorSystem);
         });
     }
 
     private static Config setupClusterNodeConfig(String port) {
         return ConfigFactory
-                .parseString(String.format("akka.remote.netty.tcp.port=%s%n", port)
+                .parseString(String.format("akka.remote.artery.canonical.hostname = \"%s\"%n", "127.0.0.1")
+                        + String.format("akka.management.http.hostname = \"%s\"%n", "127.0.0.1")
+                        + String.format("akka.remote.netty.tcp.port=%s%n", port)
                         + String.format("akka.remote.artery.canonical.port=%s%n", port))
                 .withFallback(ConfigFactory.load());
     }
+
+//    private static void serviceDiscovery(ActorSystem<Void> actorSystem) {
+//        ClusterBootstrap.get(actorSystem.classicSystem()).start();
+//        ServiceDiscovery serviceDiscovery = Discovery.get(actorSystem).discovery();
+//        CompletionStage<ServiceDiscovery.Resolved> lookup = serviceDiscovery.lookup("cluster", Duration.ofSeconds(1));
+//        lookup.thenAccept(System.out::println);
+//    }
 }
