@@ -23,8 +23,6 @@ public class Runner {
         ports.forEach(port -> {
             ActorSystem<Void> actorSystem = ActorSystem.create(Main.create(), "cluster", setupClusterNodeConfig(port));
             AkkaManagement.get(actorSystem.classicSystem()).start();
-//            serviceDiscovery(actorSystem);
-            HttpServer.start(actorSystem);
         });
     }
 
@@ -36,11 +34,4 @@ public class Runner {
                         + String.format("akka.remote.artery.canonical.port=%s%n", port))
                 .withFallback(ConfigFactory.load());
     }
-
-//    private static void serviceDiscovery(ActorSystem<Void> actorSystem) {
-//        ClusterBootstrap.get(actorSystem.classicSystem()).start();
-//        ServiceDiscovery serviceDiscovery = Discovery.get(actorSystem).discovery();
-//        CompletionStage<ServiceDiscovery.Resolved> lookup = serviceDiscovery.lookup("cluster", Duration.ofSeconds(1));
-//        lookup.thenAccept(System.out::println);
-//    }
 }

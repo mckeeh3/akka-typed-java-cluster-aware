@@ -19,13 +19,15 @@ class Main {
     }
 
     private static void bootstrap(final ActorContext<Void> context) {
-        final ActorRef<ClusterEvent.ClusterDomainEvent> clusterListener = 
-            context.spawn(ClusterListenerActor.create(), ClusterListenerActor.class.getSimpleName());
+        final ActorRef<ClusterEvent.ClusterDomainEvent> clusterListener =
+                context.spawn(ClusterListenerActor.create(), ClusterListenerActor.class.getSimpleName());
 
         Cluster.get(context.getSystem())
-            .subscriptions()
-            .tell(Subscribe.create(clusterListener, ClusterEvent.ClusterDomainEvent.class));
+                .subscriptions()
+                .tell(Subscribe.create(clusterListener, ClusterEvent.ClusterDomainEvent.class));
 
         context.spawn(ClusterAwareActor.create(), ClusterAwareActor.class.getSimpleName());
+
+        HttpServer.start(context.getSystem());
     }
 }

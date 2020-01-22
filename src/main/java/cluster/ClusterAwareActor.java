@@ -9,14 +9,18 @@ import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import org.slf4j.Logger;
+import scala.Option;
 
 import java.io.Serializable;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
 public class ClusterAwareActor {
     private final ActorContext<Message> context;
+    private final Statistics statistics = new Statistics();
     private Set<ActorRef<Message>> serviceInstances;
     private Duration tickInterval = Duration.ofSeconds(10);
 
@@ -87,6 +91,7 @@ public class ClusterAwareActor {
 
     private Behavior<Message> onPong(Pong pong) {
         log().info("<--{}", pong);
+        statistics.pong(pong.replyFrom);
         return Behaviors.same();
     }
 
@@ -139,5 +144,22 @@ public class ClusterAwareActor {
 
     enum Tick implements Message {
         Instance
+    }
+
+    static class Statistics {
+        int totalPongs = 0;
+        Map<Integer, Integer> nodePongs = new HashMap<>();
+
+        void pong(ActorRef<Message> actorRef) {
+            ++totalPongs;
+
+            Option<Object> port = actorRef.path().address().port();
+            int node = port.isDefined()
+                    ? Integer.parseInt(port.get().toString()) - 2550
+                    : -1;
+            if (node >= 1 && node <= 9) {
+                nodePongs.put(node, 1 + nodePongs.getOrDefault(node, 0));
+            }
+        }
     }
 }
