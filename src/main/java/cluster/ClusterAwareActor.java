@@ -13,9 +13,7 @@ import scala.Option;
 
 import java.io.Serializable;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class ClusterAwareActor {
@@ -55,6 +53,7 @@ public class ClusterAwareActor {
 
     private Behavior<Message> onListeners(Listeners listeners) {
         serviceInstances = listeners.listing.getServiceInstances(serviceKey);
+        statistics.clearOfflineNodeCounters(serviceInstances);
 
         log().info("Cluster aware actors subscribers changed, count {}", serviceInstances.size());
         serviceInstances
@@ -153,13 +152,31 @@ public class ClusterAwareActor {
         void pong(ActorRef<Message> actorRef) {
             ++totalPongs;
 
-            Option<Object> port = actorRef.path().address().port();
-            int node = port.isDefined()
-                    ? Integer.parseInt(port.get().toString()) - 2550
-                    : -1;
-            if (node >= 1 && node <= 9) {
-                nodePongs.put(node, 1 + nodePongs.getOrDefault(node, 0));
+            int port = actorRefPort(actorRef);
+            if (port >= 2551 && port <= 2559) {
+                nodePongs.put(port, 1 + nodePongs.getOrDefault(port, 0));
             }
+        }
+
+        void clearOfflineNodeCounters(Set<ActorRef<Message>> serviceInstances) {
+            List<Integer> ports = new ArrayList<>();
+            for (int p = 2551; p <= 2559; p++) {
+                ports.add(p);
+            }
+            serviceInstances.forEach(actorRef -> {
+                int port = actorRefPort(actorRef);
+                if (ports.contains(port)) {
+                    ports.remove((Integer) port);
+                }
+            });
+            ports.forEach(port -> nodePongs.replace(port, 0));
+        }
+
+        private static int actorRefPort(ActorRef<Message> actorRef) {
+            Option<Object> port = actorRef.path().address().port();
+            return port.isDefined()
+                    ? Integer.parseInt(port.get().toString())
+                    : -1;
         }
     }
 }
