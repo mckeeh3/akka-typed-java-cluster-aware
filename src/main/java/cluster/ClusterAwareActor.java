@@ -19,19 +19,19 @@ import java.util.stream.IntStream;
 
 class ClusterAwareActor {
     private final ActorContext<Message> context;
-    private final Statistics statistics = new Statistics();
-    private final ActorRef<Statistics> httpServerActor;
+    private final PingStatistics pingStatistics = new PingStatistics();
+    private final ActorRef<HttpServer.PingStatistics> httpServerActor;
     private Set<ActorRef<Message>> serviceInstances;
     private Duration tickInterval = Duration.ofSeconds(10);
 
     static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
-    private ClusterAwareActor(ActorContext<Message> context, ActorRef<Statistics> httpServerActor) {
+    private ClusterAwareActor(ActorContext<Message> context, ActorRef<HttpServer.PingStatistics> httpServerActor) {
         this.context = context;
         this.httpServerActor = httpServerActor;
     }
 
-    static Behavior<Message> create(ActorRef<Statistics> httpServerActor) {
+    static Behavior<Message> create(ActorRef<HttpServer.PingStatistics> httpServerActor) {
         return Behaviors.setup(context ->
                 Behaviors.withTimers(timers ->
                         new ClusterAwareActor(context, httpServerActor).behavior(context, timers)));
@@ -56,7 +56,7 @@ class ClusterAwareActor {
 
     private Behavior<Message> onListeners(Listeners listeners) {
         serviceInstances = listeners.listing.getServiceInstances(serviceKey);
-        statistics.clearOfflineNodeCounters(serviceInstances);
+        pingStatistics.clearOfflineNodeCounters(serviceInstances);
 
         log().info("Cluster aware actors subscribers changed, count {}", serviceInstances.size());
         serviceInstances
@@ -84,7 +84,7 @@ class ClusterAwareActor {
                 .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
                 .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
 
-        httpServerActor.tell(statistics);
+        httpServerActor.tell(new HttpServer.PingStatistics(pingStatistics.totalPings, pingStatistics.nodePings));
 
         return Behaviors.same();
     }
@@ -92,12 +92,12 @@ class ClusterAwareActor {
     private Behavior<Message> onPing(Ping ping) {
         log().info("<=={}", ping);
         ping.replyTo.tell(new Pong(context.getSelf(), ping.start));
+        pingStatistics.ping(ping.replyTo);
         return Behaviors.same();
     }
 
     private Behavior<Message> onPong(Pong pong) {
         log().info("<--{}", pong);
-        statistics.pong(pong.replyFrom);
         return Behaviors.same();
     }
 
@@ -152,20 +152,20 @@ class ClusterAwareActor {
         Instance
     }
 
-    static class Statistics {
-        int totalPongs = 0;
-        Map<Integer, Integer> nodePongs = new HashMap<>();
+    static class PingStatistics {
+        int totalPings = 0;
+        Map<Integer, Integer> nodePings = new HashMap<>();
 
-        Statistics() {
-            IntStream.rangeClosed(2551, 2559).forEach(p -> nodePongs.put(p, 0));
+        PingStatistics() {
+            IntStream.rangeClosed(2551, 2559).forEach(p -> nodePings.put(p, 0));
         }
 
-        void pong(ActorRef<Message> actorRef) {
-            ++totalPongs;
+        void ping(ActorRef<Message> actorRef) {
+            ++totalPings;
 
             int port = actorRefPort(actorRef);
             if (port >= 2551 && port <= 2559) {
-                nodePongs.put(port, 1 + nodePongs.getOrDefault(port, 0));
+                nodePings.put(port, 1 + nodePings.getOrDefault(port, 0));
             }
         }
 
@@ -173,10 +173,8 @@ class ClusterAwareActor {
             List<Integer> ports = new ArrayList<>();
             IntStream.rangeClosed(2551, 2559).forEach(ports::add);
 
-            serviceInstances.forEach(actorRef -> {
-                ports.removeIf(p -> p == actorRefPort(actorRef));
-            });
-            ports.forEach(port -> nodePongs.replace(port, 0));
+            serviceInstances.forEach(actorRef -> ports.removeIf(p -> p == actorRefPort(actorRef)));
+            ports.forEach(port -> nodePings.replace(port, 0));
         }
 
         private static int actorRefPort(ActorRef<Message> actorRef) {

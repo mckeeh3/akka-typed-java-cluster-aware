@@ -30,6 +30,7 @@ class HttpServer {
     private final int port;
     private final ActorSystem<Void> actorSystem;
     private final ActorMaterializer actorMaterializer;
+    private PingStatistics pingStatistics;
 
     private HttpServer(int port, ActorSystem<Void> actorSystem) {
         this.port = port;
@@ -108,7 +109,7 @@ class HttpServer {
 
     private HttpResponse jsonResponse() {
         try {
-            String jsonContents = loadNodes(actorSystem).toJson();
+            String jsonContents = loadNodes(actorSystem, pingStatistics).toJson();
             return HttpResponse.create()
                     .withEntity(ContentTypes.create(MediaTypes.APPLICATION_JAVASCRIPT, HttpCharsets.UTF_8), jsonContents)
                     .withHeaders(Collections.singletonList(HttpHeader.parse("Access-Control-Allow-Origin", "*")))
@@ -136,7 +137,7 @@ class HttpServer {
         }
     }
 
-    private static Nodes loadNodes(ActorSystem<Void> actorSystem) {
+    private static Nodes loadNodes(ActorSystem<Void> actorSystem, PingStatistics pingStatistics) {
         final Cluster cluster = Cluster.get(actorSystem);
 
         ClusterEvent.CurrentClusterState clusterState = cluster.state();
@@ -155,7 +156,8 @@ class HttpServer {
         final Nodes nodes = new Nodes(
                 memberPort(cluster.selfMember()),
                 cluster.selfMember().address().equals(clusterState.getLeader()),
-                oldest.equals(cluster.selfMember()));
+                oldest.equals(cluster.selfMember()),
+                pingStatistics);
 
         StreamSupport.stream(clusterState.getMembers().spliterator(), false)
                 .forEach(new Consumer<Member>() {
@@ -207,16 +209,32 @@ class HttpServer {
                 }).collect(Collectors.toList());
     }
 
+    void load(PingStatistics pingStatistics) {
+        this.pingStatistics = pingStatistics;
+    }
+
+    public static class PingStatistics implements Serializable {
+        public final int totalPings;
+        public final Map<Integer, Integer> nodePings;
+
+        public PingStatistics(int totalPings, Map<Integer, Integer> nodePings) {
+            this.totalPings = totalPings;
+            this.nodePings = nodePings;
+        }
+    }
+
     public static class Nodes implements Serializable {
         public final int selfPort;
         public final boolean leader;
         public final boolean oldest;
+        public final PingStatistics pingStatistics;
         public List<Node> nodes = new ArrayList<>();
 
-        public Nodes(int selfPort, boolean leader, boolean oldest) {
+        public Nodes(int selfPort, boolean leader, boolean oldest, PingStatistics pingStatistics) {
             this.selfPort = selfPort;
             this.leader = leader;
             this.oldest = oldest;
+            this.pingStatistics = pingStatistics;
         }
 
         void add(Member member, boolean leader, boolean oldest, boolean seedNode) {

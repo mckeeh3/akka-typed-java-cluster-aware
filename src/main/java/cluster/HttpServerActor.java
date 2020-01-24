@@ -6,27 +6,28 @@ import akka.actor.typed.javadsl.Behaviors;
 import org.slf4j.Logger;
 
 class HttpServerActor {
-    private final ActorContext<ClusterAwareActor.Statistics> context;
+    private final ActorContext<HttpServer.PingStatistics> context;
     private final HttpServer httpServer;
 
-    HttpServerActor(ActorContext<ClusterAwareActor.Statistics> context) {
+    HttpServerActor(ActorContext<HttpServer.PingStatistics> context) {
         this.context = context;
 
         httpServer = HttpServer.start(context.getSystem());
     }
 
-    static Behavior<ClusterAwareActor.Statistics> create() {
+    static Behavior<HttpServer.PingStatistics> create() {
         return Behaviors.setup(context -> new HttpServerActor(context).behavior());
     }
 
-    private Behavior<ClusterAwareActor.Statistics> behavior() {
-        return Behaviors.receive(ClusterAwareActor.Statistics.class)
-                .onMessage(ClusterAwareActor.Statistics.class, this::onStatistics)
+    private Behavior<HttpServer.PingStatistics> behavior() {
+        return Behaviors.receive(HttpServer.PingStatistics.class)
+                .onMessage(HttpServer.PingStatistics.class, this::onStatistics)
                 .build();
     }
 
-    private Behavior<ClusterAwareActor.Statistics> onStatistics(ClusterAwareActor.Statistics statistics) {
-        log().info("Statistics {} {}", statistics.totalPongs, statistics.nodePongs);
+    private Behavior<HttpServer.PingStatistics> onStatistics(HttpServer.PingStatistics pingStatistics) {
+        log().info("Statistics {} {}", pingStatistics.totalPings, pingStatistics.nodePings);
+        httpServer.load(pingStatistics);
         return Behaviors.same();
     }
 
