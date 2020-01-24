@@ -1,5 +1,6 @@
 package cluster;
 
+import akka.actor.Address;
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
@@ -7,6 +8,9 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.TimerScheduler;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
+import akka.cluster.Member;
+import akka.cluster.MemberStatus;
+import akka.cluster.typed.Cluster;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import org.slf4j.Logger;
 import scala.Option;
@@ -15,7 +19,9 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.StreamSupport;
 
 class ClusterAwareActor {
     private final ActorContext<Message> context;
@@ -77,13 +83,7 @@ class ClusterAwareActor {
     }
 
     private Behavior<Message> onTick() {
-        int size = serviceInstances.size() - 1;
-        log().info("Tick, ping {}", Math.max(size, 0));
-
-        serviceInstances.stream()
-                .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
-                .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
-
+        pingUpColleagues();
         httpServerActor.tell(new HttpServer.PingStatistics(pingStatistics.totalPings, pingStatistics.nodePings));
 
         return Behaviors.same();
@@ -99,6 +99,34 @@ class ClusterAwareActor {
     private Behavior<Message> onPong(Pong pong) {
         log().info("<--{}", pong);
         return Behaviors.same();
+    }
+
+    private void pingUpColleagues() {
+        if (iAmUp()) {
+            int size = serviceInstances.size() - 1;
+            log().info("Tick, ping {}", Math.max(size, 0));
+
+            final List<Address> upMembers = getUpMembers();
+
+            serviceInstances.stream()
+                    .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
+                    .filter(clusterAwareActorRef -> upMembers.contains(clusterAwareActorRef.path().address()))
+                    .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
+        } else {
+            log().info("Tick, no pings, this node is not up");
+        }
+    }
+
+    private boolean iAmUp() {
+        return Cluster.get(context.getSystem()).selfMember().status().equals(MemberStatus.up());
+    }
+
+    private List<Address> getUpMembers() {
+        final Iterable<Member> members = Cluster.get(context.getSystem()).state().getMembers();
+        return StreamSupport.stream(members.spliterator(), false)
+                .filter(member -> MemberStatus.up().equals(member.status()))
+                .map(Member::address)
+                .collect(Collectors.toList());
     }
 
     private Logger log() {
