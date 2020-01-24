@@ -28,7 +28,7 @@ class ClusterAwareActor {
     private final PingStatistics pingStatistics = new PingStatistics();
     private final ActorRef<HttpServer.PingStatistics> httpServerActor;
     private Set<ActorRef<Message>> serviceInstances;
-    private Duration tickInterval = Duration.ofSeconds(1);
+    private Duration tickInterval = Duration.ofMillis(500);
 
     static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
