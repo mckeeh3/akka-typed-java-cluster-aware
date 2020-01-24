@@ -72,6 +72,8 @@ class HttpServer {
                 return htmlFileResponse("dashboard.html");
             case "/dashboard.js":
                 return jsFileResponse("dashboard.js");
+            case "/dashboard-cluster-aware.js":
+                return jsFileResponse("dashboard-cluster-aware.js");
             case "/p5.js":
                 return jsFileResponse("p5.js");
             case "/p5.sound.js":
