@@ -15,23 +15,26 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
-public class ClusterAwareActor {
+class ClusterAwareActor {
     private final ActorContext<Message> context;
     private final Statistics statistics = new Statistics();
+    private final ActorRef<Statistics> httpServerActor;
     private Set<ActorRef<Message>> serviceInstances;
     private Duration tickInterval = Duration.ofSeconds(10);
 
     static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
-    private ClusterAwareActor(ActorContext<Message> context) {
+    private ClusterAwareActor(ActorContext<Message> context, ActorRef<Statistics> httpServerActor) {
         this.context = context;
+        this.httpServerActor = httpServerActor;
     }
 
-    static Behavior<Message> create() {
+    static Behavior<Message> create(ActorRef<Statistics> httpServerActor) {
         return Behaviors.setup(context ->
                 Behaviors.withTimers(timers ->
-                        new ClusterAwareActor(context).behavior(context, timers)));
+                        new ClusterAwareActor(context, httpServerActor).behavior(context, timers)));
     }
 
     private Behavior<Message> behavior(ActorContext<Message> context, TimerScheduler<Message> timers) {
@@ -76,9 +79,13 @@ public class ClusterAwareActor {
     private Behavior<Message> onTick() {
         int size = serviceInstances.size() - 1;
         log().info("Tick, ping {}", Math.max(size, 0));
+
         serviceInstances.stream()
                 .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
                 .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
+
+        httpServerActor.tell(statistics);
+
         return Behaviors.same();
     }
 
@@ -149,6 +156,10 @@ public class ClusterAwareActor {
         int totalPongs = 0;
         Map<Integer, Integer> nodePongs = new HashMap<>();
 
+        Statistics() {
+            IntStream.rangeClosed(2551, 2559).forEach(p -> nodePongs.put(p, 0));
+        }
+
         void pong(ActorRef<Message> actorRef) {
             ++totalPongs;
 
@@ -160,14 +171,10 @@ public class ClusterAwareActor {
 
         void clearOfflineNodeCounters(Set<ActorRef<Message>> serviceInstances) {
             List<Integer> ports = new ArrayList<>();
-            for (int p = 2551; p <= 2559; p++) {
-                ports.add(p);
-            }
+            IntStream.rangeClosed(2551, 2559).forEach(ports::add);
+
             serviceInstances.forEach(actorRef -> {
-                int port = actorRefPort(actorRef);
-                if (ports.contains(port)) {
-                    ports.remove((Integer) port);
-                }
+                ports.removeIf(p -> p == actorRefPort(actorRef));
             });
             ports.forEach(port -> nodePongs.replace(port, 0));
         }

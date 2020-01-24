@@ -40,14 +40,15 @@ class HttpServer {
         startHttpServer();
     }
 
-    static void start(ActorSystem<Void> actorSystem) {
+    static HttpServer start(ActorSystem<Void> actorSystem) {
         Option<Object> portOption = Cluster.get(actorSystem).selfMember().address().port();
         if (portOption.isDefined()) {
             int port = Integer.parseInt(portOption.get().toString());
             if (port >= 2551 && port <= 2559) {
-                new HttpServer(port + 7000, actorSystem);
+                return new HttpServer(port + 7000, actorSystem);
             }
         }
+        throw new RuntimeException("Unable to start HTTP server du to invalid node port, ports must be between 2551 and 2559.");
     }
 
     private void startHttpServer() {

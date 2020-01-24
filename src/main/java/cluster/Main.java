@@ -26,8 +26,8 @@ class Main {
                 .subscriptions()
                 .tell(Subscribe.create(clusterListener, ClusterEvent.ClusterDomainEvent.class));
 
-        context.spawn(ClusterAwareActor.create(), ClusterAwareActor.class.getSimpleName());
+        final ActorRef<ClusterAwareActor.Statistics> httpServerActorRef = context.spawn(HttpServerActor.create(), HttpServerActor.class.getSimpleName());
 
-        HttpServer.start(context.getSystem());
+        context.spawn(ClusterAwareActor.create(httpServerActorRef), ClusterAwareActor.class.getSimpleName());
     }
 }
