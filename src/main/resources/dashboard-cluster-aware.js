@@ -41,13 +41,13 @@ const clusterAware = {
 
                   const progress = pingStatistics.nodePings[port] % 10;
                   const length = 9 / 10 * (progress == 0 ? 10 : progress);
+
                   strokeWeight(0);
                   fill(color(29, 249, 246, 30));
-                  rect(grid.toX(x), grid.toY(lineY - 0.9), grid.toLength(length), grid.toLength(0.7));
+                  grid.rect(x, lineY - 0.9, length, 0.7);
 
-                  strokeWeight(5);
-                  stroke(229, 49, 46, 100);
-                  line(grid.toX(x + length), grid.toY(lineY - 0.8), grid.toX(x + length), grid.toY(lineY - 0.3));
+                  fill(color(249, 49, 46, 100));
+                  grid.rect(x + length - 0.2, lineY - 0.9, 0.2, 0.7);
               }
           }
       }

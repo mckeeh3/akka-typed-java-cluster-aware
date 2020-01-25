@@ -54,7 +54,8 @@ function drawSummary() {
 function drawNineNodes() {
     strokeWeight(2.5);
     stroke(255, 100);
-    line(grid.toX(19), grid.toY(0), grid.toX(19 + 3 * 18 + 2), grid.toY(0));
+    grid.line(19, 0, 19 + 3 * 18 + 2, 0);
+
     Label().setX(19).setY(0).setW(19 * 2 + 18).setH(1)
             .setBorder(0.1)
             .setKey("Cluster Nodes")
@@ -96,20 +97,20 @@ const grid = {
     ticksHorizontal: 76,
     ticksVertical: aspectratio(16, 9) * 76, // ticksHorizontal
     tickWidth: 0,
-    resize: function() {
+    resize: function () {
         gridWidth = windowWidth - 2 * this.borderWidth;
         this.tickWidth = gridWidth / this.ticksHorizontal;
     },
     toX: function(gridX) { // convert from grid scale to canvas scale
         return this.borderWidth + gridX * this.tickWidth;
     },
-    toY: function(gridY) {
+    toY: function (gridY) {
         return this.borderWidth + gridY * this.tickWidth;
     },
-    toLength: function(gridLength) {
+    toLength: function (gridLength) {
         return gridLength * this.tickWidth
     },
-    draw : function(bgColor) {
+    draw: function (bgColor) {
         var xEven = true;
         var yEven = true;
 
@@ -134,24 +135,30 @@ const grid = {
                 point(grid.toX(x), grid.toY(y));
             }
         }
+    },
+    line: function (x1, y1, x2, y2) {
+        line(grid.toX(x1), grid.toY(y1), grid.toX(x2), grid.toY(y2));
+    },
+    rect: function (x, y, w, h) {
+        rect(grid.toX(x), grid.toY(y), grid.toLength(w), grid.toLength(h));
     }
 }
 
 function frame(x, y, width, height) {
-    const offset = grid.tickWidth / 5;
+    const offset = 0.2;
 
-    const xl = grid.toX(x);
-    const xr = grid.toX(x + width);
-    const yt = grid.toY(y);
-    const yb = grid.toY(y + height);
+    const xl = x;
+    const xr = x + width;
+    const yt = y;
+    const yb = y + height;
 
     strokeWeight(2.5);
     stroke(255, 100);
 
-    line(xl - offset, yt, xr + offset, yt); // top horizontal
-    line(xl - offset, yb, xr + offset, yb); // bottom horizontal
-    line(xl, yt - offset, xl, yb + offset); // left vertical
-    line(xr, yt - offset, xr, yb + offset); // right vertical
+    grid.line(xl - offset, yt, xr + offset, yt); // top horizontal
+    grid.line(xl - offset, yb, xr + offset, yb); // bottom horizontal
+    grid.line(xl, yt - offset, xl, yb + offset); // left vertical
+    grid.line(xr, yt - offset, xr, yb + offset); // right vertical
 }
 
 function nodeDetails(x, y, w, h, nodeNo) {
@@ -171,8 +178,9 @@ function nodeDetails(x, y, w, h, nodeNo) {
     }
 
     if (node.seedNode) {
-        Label().setX(x).setY(y + h - 1).setW(w).setH(1)
-                .setBorder(0.15)
+        const border = 0.25
+        Label().setX(x + 3 - border).setY(y + 0.3).setW(w).setH(1)
+                .setBorder(border)
                 .setKey("seed node")
                 .setKeyColor(color(255, 128, 0))
                 .draw();
@@ -189,11 +197,11 @@ function nineNodes(x, y, size, border, nodes) {
 }
 
 function drawNode(x, y, size, border, node) {
-    const sideLength = grid.toLength(size - border * 4);
+    const sideLength = size - border * 4;
 
     strokeWeight(0);
     fill(nodeColor(node.state));
-    rect(grid.toX(x + border * 2), grid.toY(y + border * 2), sideLength, sideLength);
+    grid.rect(x + border * 2, y + border * 2, sideLength, sideLength);
 
     if (!(node.state == "offline")) {
         drawNodePort(x, y, size, border, node);
