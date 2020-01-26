@@ -111,28 +111,29 @@ const grid = {
         return gridLength * this.tickWidth
     },
     draw: function (bgColor) {
+        const offset = 2;
         var xEven = true;
         var yEven = true;
 
         background(bgColor);
+        strokeWeight(this.tickWidth / 20);
 
         for (var x = 0; x < this.ticksHorizontal; x++ ) {
             for (var y  = 0; y < this.ticksVertical; y++) {
-                drawTick(x, y, xEven, yEven, this.tickWidth);
+                drawTick(grid.toX(x), grid.toY(y), xEven, yEven, offset);
                 yEven = !yEven;
             }
             xEven = !xEven;
         }
 
-        function drawTick(x, y, xEven, yEven, tickWidth) {
+        function drawTick(gx, gy, xEven, yEven, offset) {
             if (xEven && yEven) {
-                strokeWeight(tickWidth / 8);
-                stroke(100);
-                point(grid.toX(x), grid.toY(y));
+                stroke(75);
+                line(gx, gy - offset, gx, gy + offset);
+                line(gx - offset, gy, gx + offset, gy);
             } else {
-                strokeWeight(tickWidth / 12);
                 stroke(100);
-                point(grid.toX(x), grid.toY(y));
+                point(gx, gy);
             }
         }
     },
@@ -152,7 +153,7 @@ function frame(x, y, width, height) {
     const yt = y;
     const yb = y + height;
 
-    strokeWeight(2.5);
+    strokeWeight(grid.tickWidth / 10);
     stroke(255, 100);
 
     grid.line(xl - offset, yt, xr + offset, yt); // top horizontal
