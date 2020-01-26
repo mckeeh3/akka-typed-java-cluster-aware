@@ -44,12 +44,7 @@ class ClusterAwareActor {
     }
 
     private Behavior<Message> behavior(ActorContext<Message> context, TimerScheduler<Message> timers) {
-        final ActorRef<Receptionist.Listing> listingActorRef = context.messageAdapter(Receptionist.Listing.class, Listeners::new);
-
-        context.getSystem().receptionist()
-                .tell(Receptionist.register(serviceKey, context.getSelf()));
-        context.getSystem().receptionist()
-                .tell(Receptionist.subscribe(serviceKey, listingActorRef));
+        receptionistRegisterSubscribe(context);
         timers.startTimerAtFixedRate(Tick.Instance, tickInterval);
 
         return Behaviors.receive(Message.class)
@@ -58,6 +53,15 @@ class ClusterAwareActor {
                 .onMessage(Ping.class, this::onPing)
                 .onMessage(Pong.class, this::onPong)
                 .build();
+    }
+
+    private void receptionistRegisterSubscribe(ActorContext<Message> context) {
+        final ActorRef<Receptionist.Listing> listingActorRef = context.messageAdapter(Receptionist.Listing.class, Listeners::new);
+
+        context.getSystem().receptionist()
+                .tell(Receptionist.register(serviceKey, context.getSelf()));
+        context.getSystem().receptionist()
+                .tell(Receptionist.subscribe(serviceKey, listingActorRef));
     }
 
     private Behavior<Message> onListeners(Listeners listeners) {
@@ -113,7 +117,7 @@ class ClusterAwareActor {
                     .filter(clusterAwareActorRef -> upMembers.contains(clusterAwareActorRef.path().address()))
                     .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
         } else {
-            log().info("Tick, no pings, this node is not up");
+            log().info("Tick, no pings, this node is not up, {}", Cluster.get(context.getSystem()).selfMember());
         }
     }
 
