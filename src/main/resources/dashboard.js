@@ -101,7 +101,7 @@ const grid = {
         gridWidth = windowWidth - 2 * this.borderWidth;
         this.tickWidth = gridWidth / this.ticksHorizontal;
     },
-    toX: function(gridX) { // convert from grid scale to canvas scale
+    toX: function (gridX) { // convert from grid scale to canvas scale
         return this.borderWidth + gridX * this.tickWidth;
     },
     toY: function (gridY) {
