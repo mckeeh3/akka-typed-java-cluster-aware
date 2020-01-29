@@ -115,7 +115,7 @@ class ClusterAwareActor {
             serviceInstances.stream()
                     .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
                     .filter(clusterAwareActorRef -> upMembers.contains(clusterAwareActorRef.path().address()))
-                    .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.currentTimeMillis())));
+                    .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.nanoTime())));
         } else {
             log().info("Tick, no pings, this node is not up, {}", Cluster.get(context.getSystem()).selfMember());
         }
@@ -176,7 +176,7 @@ class ClusterAwareActor {
 
         @Override
         public String toString() {
-            return String.format("%s[%s, %dms]", getClass().getSimpleName(), replyFrom.path(), System.currentTimeMillis() - pingStart);
+            return String.format("%s[%s, %,dns]", getClass().getSimpleName(), replyFrom.path(), System.nanoTime() - pingStart);
         }
     }
 
