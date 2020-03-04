@@ -42,19 +42,19 @@ class HttpServer {
     }
 
     static HttpServer start(ActorSystem<Void> actorSystem) {
-        Option<Object> portOption = Cluster.get(actorSystem).selfMember().address().port();
-        if (portOption.isDefined()) {
-            int port = Integer.parseInt(portOption.get().toString());
-            if (port >= 2551 && port <= 2559) {
-                return new HttpServer(port + 7000, actorSystem);
-            }
+        final int port = memberPort(Cluster.get(actorSystem).selfMember());
+        if (port >= 2551 && port <= 2559) {
+            return new HttpServer(port + 7000, actorSystem);
+        } else {
+            String message = String.format("HTTP server not started. Node port %d is invalid. The port must be >= 2551 and <= 2559.", port);
+            System.err.printf("%s%n", message);
+            throw new RuntimeException(message);
         }
-        throw new RuntimeException("Unable to start HTTP server du to invalid node port, ports must be between 2551 and 2559.");
     }
 
     private void startHttpServer() {
         try {
-            CompletionStage<ServerBinding> serverBindingCompletionStage = Http.get(actorSystem.classicSystem())
+            final CompletionStage<ServerBinding> serverBindingCompletionStage = Http.get(actorSystem.classicSystem())
                     .bindAndHandleSync(this::handleHttpRequest, ConnectHttp.toHost("127.0.0.1", port), actorMaterializer);
 
             serverBindingCompletionStage.toCompletableFuture().get(15, TimeUnit.SECONDS);
@@ -87,7 +87,7 @@ class HttpServer {
 
     private HttpResponse htmlFileResponse(String filename) {
         try {
-            String fileContents = readFile(filename);
+            final String fileContents = readFile(filename);
             return HttpResponse.create()
                     .withEntity(ContentTypes.TEXT_HTML_UTF8, fileContents)
                     .withStatus(StatusCodes.ACCEPTED);
@@ -99,7 +99,7 @@ class HttpServer {
 
     private HttpResponse jsFileResponse(String filename) {
         try {
-            String fileContents = readFile(filename);
+            final String fileContents = readFile(filename);
             return HttpResponse.create()
                     .withEntity(ContentTypes.create(MediaTypes.APPLICATION_JAVASCRIPT, HttpCharsets.UTF_8), fileContents)
                     .withStatus(StatusCodes.ACCEPTED);
@@ -111,7 +111,7 @@ class HttpServer {
 
     private HttpResponse jsonResponse() {
         try {
-            String jsonContents = loadNodes(actorSystem, pingStatistics).toJson();
+            final String jsonContents = loadNodes(actorSystem, pingStatistics).toJson();
             return HttpResponse.create()
                     .withEntity(ContentTypes.create(MediaTypes.APPLICATION_JAVASCRIPT, HttpCharsets.UTF_8), jsonContents)
                     .withHeaders(Collections.singletonList(HttpHeader.parse("Access-Control-Allow-Origin", "*")))
@@ -123,11 +123,11 @@ class HttpServer {
     }
 
     private String readFile(String filename) throws IOException {
-        InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
+        final InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         if (inputStream == null) {
             throw new FileNotFoundException(String.format("Filename '%s'", filename));
         } else {
-            StringBuilder fileContents = new StringBuilder();
+            final StringBuilder fileContents = new StringBuilder();
 
             try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream))) {
                 String line;
@@ -142,18 +142,18 @@ class HttpServer {
     private static Nodes loadNodes(ActorSystem<Void> actorSystem, PingStatistics pingStatistics) {
         final Cluster cluster = Cluster.get(actorSystem);
 
-        ClusterEvent.CurrentClusterState clusterState = cluster.state();
+        final ClusterEvent.CurrentClusterState clusterState = cluster.state();
 
-        Set<Member> unreachable = clusterState.getUnreachable();
+        final Set<Member> unreachable = clusterState.getUnreachable();
 
-        Optional<Member> old = StreamSupport.stream(clusterState.getMembers().spliterator(), false)
+        final Optional<Member> old = StreamSupport.stream(clusterState.getMembers().spliterator(), false)
                 .filter(member -> member.status().equals(MemberStatus.up()))
                 .filter(member -> !(unreachable.contains(member)))
                 .reduce((older, member) -> older.isOlderThan(member) ? older : member);
 
-        Member oldest = old.orElse(cluster.selfMember());
+        final Member oldest = old.orElse(cluster.selfMember());
 
-        List<Integer> seedNodePorts = seedNodePorts(actorSystem);
+        final List<Integer> seedNodePorts = seedNodePorts(actorSystem);
 
         final Nodes nodes = new Nodes(
                 memberPort(cluster.selfMember()),
@@ -196,7 +196,7 @@ class HttpServer {
     }
 
     private static int memberPort(Member member) {
-        Option<Object> portOption = member.address().port();
+        final Option<Object> portOption = member.address().port();
         return portOption.isDefined()
                 ? Integer.parseInt(portOption.get().toString())
                 : 0;
@@ -206,7 +206,7 @@ class HttpServer {
         return actorSystem.settings().config().getList("akka.cluster.seed-nodes")
                 .stream().map(s -> s.unwrapped().toString())
                 .map(s -> {
-                    String[] split = s.split(":");
+                    final String[] split = s.split(":");
                     return split.length == 0 ? 0 : Integer.parseInt(split[split.length - 1]);
                 }).collect(Collectors.toList());
     }
@@ -296,7 +296,7 @@ class HttpServer {
         }
 
         String toJson() {
-            ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+            final ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
             try {
                 return ow.writeValueAsString(this);
             } catch (JsonProcessingException e) {

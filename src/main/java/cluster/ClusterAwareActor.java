@@ -107,7 +107,7 @@ class ClusterAwareActor {
 
     private void pingUpColleagues() {
         if (iAmUp()) {
-            int size = serviceInstances.size() - 1;
+            final int size = serviceInstances.size() - 1;
             log().info("Tick, ping {}", Math.max(size, 0));
 
             final List<Address> upMembers = getUpMembers();
@@ -195,14 +195,14 @@ class ClusterAwareActor {
         void ping(ActorRef<Message> actorRef) {
             ++totalPings;
 
-            int port = actorRefPort(actorRef);
+            final int port = actorRefPort(actorRef);
             if (port >= 2551 && port <= 2559) {
                 nodePings.put(port, 1 + nodePings.getOrDefault(port, 0));
             }
         }
 
         void clearOfflineNodeCounters(Set<ActorRef<Message>> serviceInstances) {
-            List<Integer> ports = new ArrayList<>();
+            final List<Integer> ports = new ArrayList<>();
             IntStream.rangeClosed(2551, 2559).forEach(ports::add);
 
             serviceInstances.forEach(actorRef -> ports.removeIf(p -> p == actorRefPort(actorRef)));
@@ -210,7 +210,7 @@ class ClusterAwareActor {
         }
 
         private static int actorRefPort(ActorRef<Message> actorRef) {
-            Option<Object> port = actorRef.path().address().port();
+            final Option<Object> port = actorRef.path().address().port();
             return port.isDefined()
                     ? Integer.parseInt(port.get().toString())
                     : -1;

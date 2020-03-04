@@ -14,17 +14,14 @@ class Main {
         return Behaviors.setup(context -> {
             bootstrap(context);
 
-            return Behaviors.receive(Void.class).onSignal(Terminated.class, signal -> Behaviors.stopped()).build();
+            return Behaviors.receive(Void.class)
+                    .onSignal(Terminated.class, signal -> Behaviors.stopped()).build();
         });
     }
 
     private static void bootstrap(final ActorContext<Void> context) {
         final ActorRef<ClusterEvent.ClusterDomainEvent> clusterListener =
                 context.spawn(ClusterListenerActor.create(), ClusterListenerActor.class.getSimpleName());
-
-        Cluster.get(context.getSystem())
-                .subscriptions()
-                .tell(Subscribe.create(clusterListener, ClusterEvent.ClusterDomainEvent.class));
 
         final ActorRef<HttpServer.PingStatistics> httpServerActorRef = context.spawn(HttpServerActor.create(), HttpServerActor.class.getSimpleName());
 
