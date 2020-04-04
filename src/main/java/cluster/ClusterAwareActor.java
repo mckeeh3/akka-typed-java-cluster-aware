@@ -3,9 +3,7 @@ package cluster;
 import akka.actor.Address;
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
-import akka.actor.typed.javadsl.ActorContext;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.actor.typed.javadsl.TimerScheduler;
+import akka.actor.typed.javadsl.*;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
 import akka.cluster.Member;
@@ -23,36 +21,36 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
-class ClusterAwareActor {
-    private final ActorContext<Message> context;
+class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
     private final PingStatistics pingStatistics = new PingStatistics();
     private final ActorRef<HttpServer.PingStatistics> httpServerActor;
     private Set<ActorRef<Message>> serviceInstances;
-    private Duration tickInterval = Duration.ofMillis(500);
+    private static Duration tickInterval = Duration.ofMillis(500);
 
     static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
-    private ClusterAwareActor(ActorContext<Message> context, ActorRef<HttpServer.PingStatistics> httpServerActor) {
-        this.context = context;
+    private ClusterAwareActor(ActorContext<Message> context, TimerScheduler<Message> timers, ActorRef<HttpServer.PingStatistics> httpServerActor) {
+        super(context);
         this.httpServerActor = httpServerActor;
-    }
 
-    static Behavior<Message> create(ActorRef<HttpServer.PingStatistics> httpServerActor) {
-        return Behaviors.setup(context ->
-                Behaviors.withTimers(timers ->
-                        new ClusterAwareActor(context, httpServerActor).behavior(context, timers)));
-    }
-
-    private Behavior<Message> behavior(ActorContext<Message> context, TimerScheduler<Message> timers) {
         receptionistRegisterSubscribe(context);
         timers.startTimerAtFixedRate(Tick.Instance, tickInterval);
+    }
 
-        return Behaviors.receive(Message.class)
+    @Override
+    public Receive<Message> createReceive() {
+        return newReceiveBuilder()
                 .onMessage(Listeners.class, this::onListeners)
                 .onMessage(Tick.class, notUsed -> onTick())
                 .onMessage(Ping.class, this::onPing)
                 .onMessage(Pong.class, this::onPong)
                 .build();
+    }
+
+    static Behavior<Message> create(ActorRef<HttpServer.PingStatistics> httpServerActor) {
+        return Behaviors.setup(context ->
+                Behaviors.withTimers(timers ->
+                        new ClusterAwareActor(context, timers, httpServerActor)));
     }
 
     private void receptionistRegisterSubscribe(ActorContext<Message> context) {
@@ -79,7 +77,7 @@ class ClusterAwareActor {
                     }
 
                     private String self(ActorRef<Message> clusterAwareActorRef) {
-                        return clusterAwareActorRef.equals(context.getSelf()) ? "(SELF) " : "";
+                        return clusterAwareActorRef.equals(getContext().getSelf()) ? "(SELF) " : "";
                     }
                 });
 
@@ -95,7 +93,7 @@ class ClusterAwareActor {
 
     private Behavior<Message> onPing(Ping ping) {
         log().info("<=={}", ping);
-        ping.replyTo.tell(new Pong(context.getSelf(), ping.start));
+        ping.replyTo.tell(new Pong(getContext().getSelf(), ping.start));
         pingStatistics.ping(ping.replyTo);
         return Behaviors.same();
     }
@@ -106,6 +104,8 @@ class ClusterAwareActor {
     }
 
     private void pingUpColleagues() {
+        final ActorContext<Message> context = getContext();
+
         if (iAmUp()) {
             final int size = serviceInstances.size() - 1;
             log().info("Tick, ping {}", Math.max(size, 0));
@@ -122,11 +122,11 @@ class ClusterAwareActor {
     }
 
     private boolean iAmUp() {
-        return Cluster.get(context.getSystem()).selfMember().status().equals(MemberStatus.up());
+        return Cluster.get(getContext().getSystem()).selfMember().status().equals(MemberStatus.up());
     }
 
     private List<Address> getUpMembers() {
-        final Iterable<Member> members = Cluster.get(context.getSystem()).state().getMembers();
+        final Iterable<Member> members = Cluster.get(getContext().getSystem()).state().getMembers();
         return StreamSupport.stream(members.spliterator(), false)
                 .filter(member -> MemberStatus.up().equals(member.status()))
                 .map(Member::address)
@@ -134,7 +134,7 @@ class ClusterAwareActor {
     }
 
     private Logger log() {
-        return context.getLog();
+        return getContext().getLog();
     }
 
     public interface Message {

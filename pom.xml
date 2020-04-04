@@ -16,10 +16,9 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>8</java.version>
     <scala.version>2.13</scala.version>
-    <akka.version>2.6.1</akka.version>
+    <akka.version>2.6.4</akka.version>
     <akka.http.version>10.1.11</akka.http.version>
-    <akka.management.version>1.0.5</akka.management.version>
-<!--    <jackson.version>2.10.1</jackson.version>-->
+    <akka.management.version>1.0.6</akka.management.version>
   </properties>
 
   <dependencies>
@@ -84,18 +83,6 @@
       <artifactId>logback-classic</artifactId>
       <version>1.2.3</version>
     </dependency>
-
-    <!-- JSON -->
-<!--    <dependency>-->
-<!--      <groupId>com.fasterxml.jackson.core</groupId>-->
-<!--      <artifactId>jackson-core</artifactId>-->
-<!--      <version>${jackson.version}</version>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>com.fasterxml.jackson.core</groupId>-->
-<!--      <artifactId>jackson-databind</artifactId>-->
-<!--      <version>${jackson.version}</version>-->
-<!--    </dependency>-->
   </dependencies>
 
   <build>

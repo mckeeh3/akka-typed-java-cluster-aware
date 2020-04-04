@@ -1,4 +1,4 @@
-## Akka Java Cluster Aware Example
+## Akka Typed Java Cluster Aware Example
 > **WARNING**: This README is undergoing extensive modifications.
 
 > **WARNING**: The current contents are not relevant to this project.  
@@ -12,6 +12,7 @@ This project is one in a series of projects that starts with a simple Akka Clust
 
 The project series is composed of the following GitHub repos:
 * [akka-java-cluster](https://github.com/mckeeh3/akka-java-cluster)
+* [akka-typed-java-cluster-sbr](https://github.com/mckeeh3/akka-typed-java-cluster-sbr)
 * [akka-java-cluster-aware](https://github.com/mckeeh3/akka-java-cluster-aware) (this project)
 * [akka-java-cluster-singleton](https://github.com/mckeeh3/akka-java-cluster-singleton)
 * [akka-java-cluster-sharding](https://github.com/mckeeh3/akka-java-cluster-sharding)
@@ -22,13 +23,14 @@ Each project can be cloned, built, and runs independently of the other projects.
 
 ### About Akka Clustering Awareness
 
-Before we get into the details of how this project is set up as a cluster-aware example, let's first use a simple example scenario. In this example, we'll use a basic chat room app. As people enter the chat room, they can see a list of who else is in the chat room. Every person in the chat room is given a simple set of instructions, send a message with the word "ping" every minute to all of the other people currently in the chat room. When you receive a "ping" message respond to the sender with the word "pong."
+Before we get into the details of how this project is set up as a cluster-aware example, let's first use a simple example scenario. In this example, we'll use a basic chat room app. As people enter the chat room, they can see a list of who else is in the chat room. Every person in the chat room is given a simple set of instructions, send a message with the word "ping" every minute to all of the other people currently in the chat room. When you receive a "ping" message respond to the sender with a "pong" message.
 
 In this example, each person in the chat room is essentially a simple actor that is following a simple set of instructions. Also, each person is aware of who else is in the chat room and that all of the other participants are following the same set of instructions.
 
-This example scenario is similar to the fundamental approach used by aware cluster actors. Cluster-aware actor classes are implemented with the expectation that an instance of the actor is running on each node in a cluster. The cluster-aware actors access a list of each of the nodes in the cluster as a way to send messages to its clones running on the other nodes.
+This example scenario is similar to the fundamental approach used by cluster-aware actors. Cluster-aware actor classes are implemented with the expectation that an instance of the actor is running on each node in a cluster.
+FIX***** The cluster-aware actors access a list of each of the nodes in the cluster as a way to send messages to its clones running on the other nodes.
 
-Message routing is the most common cluster-aware usage pattern. Messages sent to cluster-aware router actors are forwarded to other actors that are distributed across the cluster. For example, router actors work in conjunction with worker actors. Messages are sent that contains a worker identifier. These messages may be sent to any router actor. When a router actor receives each message, it looks at the id provided in the message to determine if the message belongs to one of the worker actors running on the same node as the router or if the worker for that identifier is located on another node. If the message is for a local actor, the router forwards it to the local worker. For messages that belong to remote workers, the router forwards the message to the remote router. The remote router goes through the same process. It looks at the message id to determine how the message should be routed.
+Message routing is the most common cluster-aware usage pattern. Messages sent to cluster-aware router actors are forwarded to other actors that are distributed across the cluster. For example, router actors work in conjunction with worker actors. Messages contain a worker identifier. These messages may be sent to any of the router actors running on each node in the cluster. When a router actor receives each message, it looks at the worker id provided in the message to determine if the message should be routed to a local or remote worker actor. If the message is for a local actor, the router forwards it to the local worker. For messages that belong to remote workers, the router forwards the message to the remote router actor responsible for handling messages for the targeted worker actor. When the remote router actor receives the forwarded message, it goes through the same routing process.
 
 This project includes a simple cluster-aware actor that periodically sends ping messages and responds to ping messages with pong messages sent back to the pinger. The key thing to understand that this messaging is happening between Akka cluster nodes, each node is running as a separate JVM, and the messages are sent over the network.
 
