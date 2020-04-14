@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
-class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
+public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
     private final PingStatistics pingStatistics = new PingStatistics();
     private final ActorRef<HttpServer.PingStatistics> httpServerActor;
     private Set<ActorRef<Message>> serviceInstances;
@@ -86,8 +86,9 @@ class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
 
     private Behavior<Message> onTick() {
         pingUpColleagues();
-        httpServerActor.tell(new HttpServer.PingStatistics(pingStatistics.totalPings, pingStatistics.nodePings));
-
+        httpServerActor.tell(new HttpServer.PingStatistics(
+                pingStatistics.totalPings,
+                Collections.unmodifiableMap(pingStatistics.nodePings)));
         return Behaviors.same();
     }
 
