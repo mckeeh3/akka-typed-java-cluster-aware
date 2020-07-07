@@ -1,23 +1,20 @@
 ## Akka Typed Java Cluster Aware Example
-> **WARNING**: This README is undergoing extensive modifications.
-
-> **WARNING**: The current contents are not relevant to this project.  
 
 ### Introduction
 
 This is a Java, Maven, Akka project that demonstrates how to setup a basic
-[Akka Cluster](https://doc.akka.io/docs/akka/current/index-cluster.html) with a focus on cluster aware actors.
+[Akka Cluster](https://doc.akka.io/docs/akka/current/typed/index-cluster.html).
 
 This project is one in a series of projects that starts with a simple Akka Cluster project and progressively builds up to examples of event sourcing and command query responsibility segregation.
 
 The project series is composed of the following GitHub repos:
-* [akka-java-cluster](https://github.com/mckeeh3/akka-java-cluster)
+* [akka-typed-java-cluster](https://github.com/mckeeh3/akka-typed-java-cluster)
 * [akka-typed-java-cluster-sbr](https://github.com/mckeeh3/akka-typed-java-cluster-sbr)
-* [akka-java-cluster-aware](https://github.com/mckeeh3/akka-java-cluster-aware) (this project)
-* [akka-java-cluster-singleton](https://github.com/mckeeh3/akka-java-cluster-singleton)
-* [akka-java-cluster-sharding](https://github.com/mckeeh3/akka-java-cluster-sharding)
-* [akka-java-cluster-persistence](https://github.com/mckeeh3/akka-java-cluster-persistence)
-* [akka-java-cluster-persistence-query](https://github.com/mckeeh3/akka-java-cluster-persistence-query)
+* [akka-typed-java-cluster-aware](https://github.com/mckeeh3/akka-typed-java-cluster-aware) (this project)
+* [akka-typed-java-cluster-singleton](https://github.com/mckeeh3/akka-typed-java-cluster-singleton) (coming soon)
+* [akka-typed-java-cluster-sharding](https://github.com/mckeeh3/akka-typed-java-cluster-sharding) (coming soon)
+* [akka-typed-java-cluster-persistence](https://github.com/mckeeh3/akka-typed-java-cluster-persistence) (coming soon)
+* [akka-typed-java-cluster-persistence-query](https://github.com/mckeeh3/akka-typed-java-cluster-persistence-query) (coming soon)
 
 Each project can be cloned, built, and runs independently of the other projects.
 
@@ -28,7 +25,8 @@ Before we get into the details of how this project is set up as a cluster-aware 
 In this example, each person in the chat room is essentially a simple actor that is following a simple set of instructions. Also, each person is aware of who else is in the chat room and that all of the other participants are following the same set of instructions.
 
 This example scenario is similar to the fundamental approach used by cluster-aware actors. Cluster-aware actor classes are implemented with the expectation that an instance of the actor is running on each node in a cluster.
-FIX***** The cluster-aware actors access a list of each of the nodes in the cluster as a way to send messages to its clones running on the other nodes.
+
+**FIX** The cluster-aware actors access a list of each of the nodes in the cluster as a way to send messages to its clones running on the other nodes.
 
 Message routing is the most common cluster-aware usage pattern. Messages sent to cluster-aware router actors are forwarded to other actors that are distributed across the cluster. For example, router actors work in conjunction with worker actors. Messages contain a worker identifier. These messages may be sent to any of the router actors running on each node in the cluster. When a router actor receives each message, it looks at the worker id provided in the message to determine if the message should be routed to a local or remote worker actor. If the message is for a local actor, the router forwards it to the local worker. For messages that belong to remote workers, the router forwards the message to the remote router actor responsible for handling messages for the targeted worker actor. When the remote router actor receives the forwarded message, it goes through the same routing process.
 
@@ -37,113 +35,220 @@ This project includes a simple cluster-aware actor that periodically sends ping 
 ~~~java
 package cluster;
 
-import akka.actor.AbstractLoggingActor;
-import akka.actor.ActorSelection;
-import akka.actor.Cancellable;
-import akka.actor.Props;
-import akka.cluster.Cluster;
+import akka.actor.Address;
+import akka.actor.typed.ActorRef;
+import akka.actor.typed.Behavior;
+import akka.actor.typed.javadsl.*;
+import akka.actor.typed.receptionist.Receptionist;
+import akka.actor.typed.receptionist.ServiceKey;
 import akka.cluster.Member;
 import akka.cluster.MemberStatus;
-import scala.concurrent.duration.Duration;
-import scala.concurrent.duration.FiniteDuration;
+import akka.cluster.typed.Cluster;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import org.slf4j.Logger;
+import scala.Option;
 
 import java.io.Serializable;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
+import java.util.*;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.StreamSupport;
 
-class ClusterAwareActor extends AbstractLoggingActor {
-    private final Cluster cluster = Cluster.get(context().system());
-    private final FiniteDuration tickInterval = Duration.create(10, TimeUnit.SECONDS);
-    private Cancellable ticker;
+class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
+    private final PingStatistics pingStatistics = new PingStatistics();
+    private final ActorRef<HttpServer.PingStatistics> httpServerActor;
+    private Set<ActorRef<Message>> serviceInstances;
+    private static Duration tickInterval = Duration.ofMillis(500);
+
+    static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
+
+    private ClusterAwareActor(ActorContext<Message> context, TimerScheduler<Message> timers, ActorRef<HttpServer.PingStatistics> httpServerActor) {
+        super(context);
+        this.httpServerActor = httpServerActor;
+
+        receptionistRegisterSubscribe(context);
+        timers.startTimerAtFixedRate(Tick.Instance, tickInterval);
+    }
 
     @Override
-    public Receive createReceive() {
-        return receiveBuilder()
-                .matchEquals("tick", s -> tick())
-                .match(Message.Ping.class, this::ping)
-                .match(Message.Pong.class, this::pong)
+    public Receive<Message> createReceive() {
+        return newReceiveBuilder()
+                .onMessage(Listeners.class, this::onListeners)
+                .onMessage(Tick.class, notUsed -> onTick())
+                .onMessage(Ping.class, this::onPing)
+                .onMessage(Pong.class, this::onPong)
                 .build();
     }
 
-    private void tick() {
-        Member me = cluster.selfMember();
-        log().debug("Tick {}", me);
-
-        cluster.state().getMembers().forEach(member -> {
-            if (!me.equals(member) && member.status().equals(MemberStatus.up())) {
-                tick(member);
-            }
-        });
+    static Behavior<Message> create(ActorRef<HttpServer.PingStatistics> httpServerActor) {
+        return Behaviors.setup(context ->
+                Behaviors.withTimers(timers ->
+                        new ClusterAwareActor(context, timers, httpServerActor)));
     }
 
-    private void tick(Member member) {
-        String path = member.address().toString() + self().path().toStringWithoutAddress();
-        ActorSelection actorSelection = context().actorSelection(path);
-        Message.Ping ping = new Message.Ping();
-        log().debug("{} -> {}", ping, actorSelection);
-        actorSelection.tell(ping, self());
+    private void receptionistRegisterSubscribe(ActorContext<Message> context) {
+        final ActorRef<Receptionist.Listing> listingActorRef = context.messageAdapter(Receptionist.Listing.class, Listeners::new);
+
+        context.getSystem().receptionist()
+                .tell(Receptionist.register(serviceKey, context.getSelf()));
+        context.getSystem().receptionist()
+                .tell(Receptionist.subscribe(serviceKey, listingActorRef));
     }
 
-    private void ping(Message.Ping ping) {
-        log().debug("{} <- {}", ping, sender());
-        sender().tell(Message.Pong.from(ping), self());
+    private Behavior<Message> onListeners(Listeners listeners) {
+        serviceInstances = listeners.listing.getServiceInstances(serviceKey);
+        pingStatistics.clearOfflineNodeCounters(serviceInstances);
+
+        log().info("Cluster aware actors subscribers changed, count {}", serviceInstances.size());
+        serviceInstances
+                .forEach(new Consumer<ActorRef<Message>>() {
+                    int i = 0;
+
+                    @Override
+                    public void accept(ActorRef<Message> messageActorRef) {
+                        log().info("{} {}{}", ++i, self(messageActorRef), messageActorRef);
+                    }
+
+                    private String self(ActorRef<Message> clusterAwareActorRef) {
+                        return clusterAwareActorRef.equals(getContext().getSelf()) ? "(SELF) " : "";
+                    }
+                });
+
+        return Behaviors.same();
     }
 
-    private void pong(Message.Pong pong) {
-        log().debug("{} <- {}", pong, sender());
+    private Behavior<Message> onTick() {
+        pingUpColleagues();
+        httpServerActor.tell(new HttpServer.PingStatistics(pingStatistics.totalPings, pingStatistics.nodePings));
+
+        return Behaviors.same();
     }
 
-    @Override
-    public void preStart() {
-        log().debug("Start");
-        ticker = context().system().scheduler()
-                .schedule(Duration.Zero(),
-                        tickInterval,
-                        self(),
-                        "tick",
-                        context().system().dispatcher(),
-                        null);
+    private Behavior<Message> onPing(Ping ping) {
+        log().info("<=={}", ping);
+        ping.replyTo.tell(new Pong(getContext().getSelf(), ping.start));
+        pingStatistics.ping(ping.replyTo);
+        return Behaviors.same();
     }
 
-    @Override
-    public void postStop() {
-        ticker.cancel();
-        log().debug("Stop");
+    private Behavior<Message> onPong(Pong pong) {
+        log().info("<--{}", pong);
+        return Behaviors.same();
     }
 
-    static Props props() {
-        return Props.create(ClusterAwareActor.class);
+    private void pingUpColleagues() {
+        final ActorContext<Message> context = getContext();
+
+        if (iAmUp()) {
+            final int size = serviceInstances.size() - 1;
+            log().info("Tick, ping {}", Math.max(size, 0));
+
+            final List<Address> upMembers = getUpMembers();
+
+            serviceInstances.stream()
+                    .filter(clusterAwareActorRef -> !clusterAwareActorRef.equals(context.getSelf()))
+                    .filter(clusterAwareActorRef -> upMembers.contains(clusterAwareActorRef.path().address()))
+                    .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.nanoTime())));
+        } else {
+            log().info("Tick, no pings, this node is not up, {}", Cluster.get(context.getSystem()).selfMember());
+        }
     }
 
-    interface Message {
-        class Ping implements Serializable {
-            final long time;
+    private boolean iAmUp() {
+        return Cluster.get(getContext().getSystem()).selfMember().status().equals(MemberStatus.up());
+    }
 
-            Ping() {
-                time = System.nanoTime();
-            }
+    private List<Address> getUpMembers() {
+        final Iterable<Member> members = Cluster.get(getContext().getSystem()).state().getMembers();
+        return StreamSupport.stream(members.spliterator(), false)
+                .filter(member -> MemberStatus.up().equals(member.status()))
+                .map(Member::address)
+                .collect(Collectors.toList());
+    }
 
-            @Override
-            public String toString() {
-                return String.format("%s[%dus]", getClass().getSimpleName(), time);
+    private Logger log() {
+        return getContext().getLog();
+    }
+
+    public interface Message {
+    }
+
+    private static class Listeners implements Message {
+        final Receptionist.Listing listing;
+
+        private Listeners(Receptionist.Listing listing) {
+            this.listing = listing;
+        }
+    }
+
+    public static class Ping implements Message, Serializable {
+        public final ActorRef<Message> replyTo;
+        public final long start;
+
+        @JsonCreator
+        public Ping(ActorRef<Message> replyTo, long start) {
+            this.replyTo = replyTo;
+            this.start = start;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s[%s]", getClass().getSimpleName(), replyTo.path());
+        }
+    }
+
+    public static class Pong implements Message, Serializable {
+        public final ActorRef<Message> replyFrom;
+        public final long pingStart;
+
+        @JsonCreator
+        public Pong(ActorRef<Message> replyFrom, long pingStart) {
+            this.replyFrom = replyFrom;
+            this.pingStart = pingStart;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s[%s, %,dns]", getClass().getSimpleName(), replyFrom.path(), System.nanoTime() - pingStart);
+        }
+    }
+
+    enum Tick implements Message {
+        Instance
+    }
+
+    static class PingStatistics {
+        int totalPings = 0;
+        Map<Integer, Integer> nodePings = new HashMap<>();
+
+        PingStatistics() {
+            IntStream.rangeClosed(2551, 2559).forEach(p -> nodePings.put(p, 0));
+        }
+
+        void ping(ActorRef<Message> actorRef) {
+            ++totalPings;
+
+            final int port = actorRefPort(actorRef);
+            if (port >= 2551 && port <= 2559) {
+                nodePings.put(port, 1 + nodePings.getOrDefault(port, 0));
             }
         }
 
-        class Pong implements Serializable {
-            final long pingTime;
+        void clearOfflineNodeCounters(Set<ActorRef<Message>> serviceInstances) {
+            final List<Integer> ports = new ArrayList<>();
+            IntStream.rangeClosed(2551, 2559).forEach(ports::add);
 
-            private Pong(long pingTime) {
-                this.pingTime = pingTime;
-            }
+            serviceInstances.forEach(actorRef -> ports.removeIf(p -> p == actorRefPort(actorRef)));
+            ports.forEach(port -> nodePings.replace(port, 0));
+        }
 
-            static Pong from(Ping ping) {
-                return new Pong(ping.time);
-            }
-
-            @Override
-            public String toString() {
-                final double elapsed = (System.nanoTime() - pingTime) / 1000000000.0;
-                return String.format("%s[elapsed %.9fs, %dus]", getClass().getSimpleName(), elapsed, pingTime);
-            }
+        private static int actorRefPort(ActorRef<Message> actorRef) {
+            final Option<Object> port = actorRef.path().address().port();
+            return port.isDefined()
+                    ? Integer.parseInt(port.get().toString())
+                    : -1;
         }
     }
 }
@@ -229,103 +334,315 @@ This actor aware implementation functions much like the chat app example we cove
 
 ### Installation
 
-~~~~bash
-git clone https://github.com/mckeeh3/akka-java-cluster-aware.git
-cd akka-java-cluster-aware
-mvn clean package
-~~~~
+~~~bash
+$ git clone https://github.com/mckeeh3/akka-typed-java-cluster.git
+$ cd akka-typed-java-cluster
+$ mvn clean package
+~~~
 
 The Maven command builds the project and creates a self contained runnable JAR.
 
-### Run a cluster (Mac, Linux)
+### Run a cluster (Mac, Linux, Cygwin)
 
 The project contains a set of scripts that can be used to start and stop individual cluster nodes or start and stop a cluster of nodes.
 
 The main script `./akka` is provided to run a cluster of nodes or start and stop individual nodes.
-Use `./akka node start [1-9] | stop` to start and stop individual nodes and `./akka cluster start [1-9] | stop` to start and stop a cluster of nodes.
+
+~~~bash
+$ ./akka
+~~~
+Run the akka script with no parameters to see the available options.
+~~~
+This CLI is used to start, stop and view the dashboard nodes in an Akka cluster.
+
+These commands manage the Akka cluster as defined in this project. A cluster
+of nodes is started using the JAR file built with the project Maven POM file.
+
+Cluster commands are used to start, stop, view status, and view the dashboard Akka cluster nodes.
+
+./akka cluster start N | stop | status | dashboard [N]
+./akka cluster start [N]      # Starts one or more cluster nodes as specified by [N] or default 9, which must be 1-9.
+./akka cluster stop           # Stops all currently cluster nodes.
+./akka cluster status         # Shows an Akka Management view of the cluster status/state.
+./akka cluster dashboard [N]  # Opens an Akka cluster dashboard web page hosted on the specified [N] or default 1, which must be 1-9.
+
+Node commands are used to start, stop, kill, down, or tail the log of cluster nodes.
+Nodes are started on port 255N and management port 855N, N is the node number 1-9.
+
+./akka node start N | stop N | kill N | down N | tail N
+./akka node start N...  # Start one or more cluster nodes for nodes 1-9.
+./akka node stop N...   # Stop one or more cluster nodes for nodes 1-9.
+./akka node kill N...   # Kill (kill -9) one or more cluster nodes for nodes 1-9.
+./akka node down N...   # Down one or more cluster nodes for nodes 1-9.
+./akka node tail N      # Tail the log file of the specified cluster node for nodes 1-9.
+
+Net commands are used to block and unblock network access to cluster nodes.
+
+./akka net block N | unblock | view | enable | disable
+./akka net block N...  # Block network access to node ports, ports 255N, nodes N 1-9.
+./akka net unblock     # Reset the network blocking rules.
+./akka net view        # View the current network blocking rules.
+./akka net enable      # Enable packet filtering, which enables blocking network access to cluster nodes. (OSX only)
+./akka net disable     # Disable packet filtering, which disables blocking network access to cluster nodes. (OSX only)
+~~~
+
 The `cluster` and `node` start options will start Akka nodes on ports 2551 through 2559.
-Both `stdin` and `stderr` output is sent to a file in the `/tmp` directory using the file naming convention `/tmp/<project-dir-name>-N.log`.
+Both `stdin` and `stderr` output is sent to a log files in the `/tmp` directory using the file naming convention `/tmp/<project-dir-name>-N.log`.
 
-Start node 1 on port 2551 and node 2 on port 2552.
+Start a cluster of nine nodes running on ports 2551 to 2559.
 ~~~bash
-./akka node start 1
-./akka node start 2
-~~~
-
-Stop node 3 on port 2553.
-~~~bash
-./akka node stop 3
-~~~
-
-Start a cluster of four nodes on ports 2551, 2552, 2553, and 2554.
-~~~bash
-./akka cluster start 4
+$ ./akka cluster start
+Starting 9 cluster nodes
+Start node 1 on port 2551, management port 8551, HTTP port 9551
+Start node 2 on port 2552, management port 8552, HTTP port 9552
+Start node 3 on port 2553, management port 8553, HTTP port 9553
+Start node 4 on port 2554, management port 8554, HTTP port 9554
+Start node 5 on port 2555, management port 8555, HTTP port 9555
+Start node 6 on port 2556, management port 8556, HTTP port 9556
+Start node 7 on port 2557, management port 8557, HTTP port 9557
+Start node 8 on port 2558, management port 8558, HTTP port 9558
+Start node 9 on port 2559, management port 8559, HTTP port 9559
 ~~~
 
 Stop all currently running cluster nodes.
 ~~~bash
-./akka cluster stop
+$ ./akka cluster stop
+Stop node 1 on port 2551
+Stop node 2 on port 2552
+Stop node 3 on port 2553
+Stop node 4 on port 2554
+Stop node 5 on port 2555
+Stop node 6 on port 2556
+Stop node 7 on port 2557
+Stop node 8 on port 2558
+Stop node 9 on port 2559
 ~~~
 
-You can use the `./akka cluster start [1-9]` script to start multiple nodes and then use `./akka node start [1-9]` and `./akka node stop [1-9]`
-to start and stop individual nodes.
+Stop node 3 on port 2553.
+~~~bash
+$ ./akka node stop 3
+Stop node 3 on port 2553
+~~~
 
-Use the `./akka node tail [1-9]` command to `tail -f` a log file for nodes 1 through 9.
+Stop nodes 5 and 7 on ports 2555 and 2557.
+~~~bash
+$ ./akka node stop 5 7
+Stop node 5 on port 2555
+Stop node 7 on port 2557
+~~~
+
+Start node 3, 5, and 7 on ports 2553, 2555 and2557.
+~~~bash
+$ ./akka node start 3 5 7
+Start node 3 on port 2553, management port 8553, HTTP port 9553
+Start node 5 on port 2555, management port 8555, HTTP port 9555
+Start node 7 on port 2557, management port 8557, HTTP port 9557
+~~~
+
+Start a cluster of four nodes on ports 2551, 2552, 2553, and 2554.
+~~~bash
+$ ./akka cluster start 4
+Starting 4 cluster nodes
+Start node 1 on port 2551, management port 8551, HTTP port 9551
+Start node 2 on port 2552, management port 8552, HTTP port 9552
+Start node 3 on port 2553, management port 8553, HTTP port 9553
+Start node 4 on port 2554, management port 8554, HTTP port 9554
+~~~
+
+Again, stop all currently running cluster nodes.
+~~~bash
+$ ./akka cluster stop
+~~~
 
 The `./akka cluster status` command displays the status of a currently running cluster in JSON format using the
 [Akka Management](https://developer.lightbend.com/docs/akka-management/current/index.html)
 extension
 [Cluster Http Management](https://developer.lightbend.com/docs/akka-management/current/cluster-http-management.html).
 
-### Run a cluster (Windows, command line)
+### The Cluster Dashboard ###
 
-The following Maven command runs a signle JVM with 3 Akka actor systems on ports 2551, 2552, and a radmonly selected port.
-~~~~bash
-mvn exec:java
-~~~~
-Use CTRL-C to stop.
+Included in this project is a cluster dashboard. The dashboard visualizes live information about a running cluster.  
 
-To run on specific ports use the following `-D` option for passing in command line arguements.
-~~~~bash
-mvn exec:java -Dexec.args="2551"
-~~~~
-The default no arguments is equilevalant to the following.
-~~~~bash
-mvn exec:java -Dexec.args="2551 2552 0"
-~~~~
-A common way to run tests is to start single JVMs in multiple command windows. This simulates running a multi-node Akka cluster.
-For example, run the following 4 commands in 4 command windows.
-~~~~bash
-mvn exec:java -Dexec.args="2551" > /tmp/$(basename $PWD)-1.log
-~~~~
-~~~~bash
-mvn exec:java -Dexec.args="2552" > /tmp/$(basename $PWD)-2.log
-~~~~
-~~~~bash
-mvn exec:java -Dexec.args="0" > /tmp/$(basename $PWD)-3.log
-~~~~
-~~~~bash
-mvn exec:java -Dexec.args="0" > /tmp/$(basename $PWD)-4.log
-~~~~
-This runs a 4 node Akka cluster starting 2 nodes on ports 2551 and 2552, which are the cluster seed nodes as configured and the `application.conf` file.
-And 2 nodes on randomly selected port numbers.
-The optional redirect `> /tmp/$(basename $PWD)-4.log` is an example for pushing the log output to filenames based on the project direcctory name.
+~~~bash
+$ git clone https://github.com/mckeeh3/akka-typed-java-cluster.git
+$ cd akka-typed-java-cluster
+$ mvn clean package
+$ ./akka cluster start
+$ ./akka cluster dashboard
+~~~
+Follow the steps above to download, build, run, and bring up a dashboard in your default web browser.
 
-For convenience, in a Linux command shell define the following aliases.
+![Dashboard 1](docs/images/akka-typed-java-cluster-aware-dashboard-01.png)
 
-~~~~bash
-alias p1='cd ~/akka-java/akka-java-cluster'
-alias p2='cd ~/akka-java/akka-java-cluster-aware'
-alias p3='cd ~/akka-java/akka-java-cluster-singleton'
-alias p4='cd ~/akka-java/akka-java-cluster-sharding'
-alias p5='cd ~/akka-java/akka-java-cluster-persistence'
-alias p6='cd ~/akka-java/akka-java-cluster-persistence-query'
+The following sequence of commands changes the cluster state as shown below.
 
-alias m1='clear ; mvn exec:java -Dexec.args="2551" > /tmp/$(basename $PWD)-1.log'
-alias m2='clear ; mvn exec:java -Dexec.args="2552" > /tmp/$(basename $PWD)-2.log'
-alias m3='clear ; mvn exec:java -Dexec.args="0" > /tmp/$(basename $PWD)-3.log'
-alias m4='clear ; mvn exec:java -Dexec.args="0" > /tmp/$(basename $PWD)-4.log'
-~~~~
+~~~bash
+$ ./akka node stop 1 6    
+Stop node 1 on port 2551
+Stop node 6 on port 2556
 
-The p1-6 alias commands are shortcuts for cd'ing into one of the six project directories.
-The m1-4 alias commands start and Akka node with the appropriate port. Stdout is also redirected to the /tmp directory.
+$ ./akka node kill 7  
+Kill node 7 on port 2557
+
+$ ./akka node start 1 6  
+Start node 1 on port 2551, management port 8551, HTTP port 9551
+Start node 6 on port 2556, management port 8556, HTTP port 9556
+
+$ ./akka node stop 8   
+Stop node 8 on port 2558
+~~~
+
+![Dashboard 2](docs/images/akka-typed-java-cluster-aware-dashboard-02.png)
+
+Note that node 1 and 6 remain in a "weekly up" state. (You can learn more about Akka clusters in the
+[Cluster Specification](https://doc.akka.io/docs/akka/current/typed/cluster-concepts.html#cluster-specification)
+and the
+[Cluster Membership Service](https://doc.akka.io/docs/akka/current/typed/cluster-membership.html#cluster-membership-service)
+documentation)
+
+Also note that the
+[leader](https://doc.akka.io/docs/akka/current/typed/cluster-membership.html#leader),
+indicated by the "L" moves from node 1 to 2. The leader "L" is red, which indicates that one or more nodes are in an unreachable state. While in this state the leader will not promote nodes to an "up" state. This is the reason why in the above example new nodes remain in a weakly up state.
+
+The [oldest node](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#singleton-manager),
+indicated by the "O" in node 5, moved from node 1 to node 5. The visualization of the cluster state changes is shown in the dashboard as they happen.
+
+### How the Cluster Dashboard Works ###
+
+When the dashboard web page loads, it kicks off included JavaScript code used to render the dashboard web page. The
+[p5.js JavaScript library](https://p5js.org/)
+does most of the actual rendering of running Akka clusters.
+
+The dashboard layout on the left shows the current state of the cluster from the perspective of the current leader node. Please see the
+[Leader documentation](https://doc.akka.io/docs/akka/current/typed/cluster-membership.html#leader)
+for more details about its role in the cluster. That said, the leader node is not that significant; it is NOT a cluster master node.
+
+The left panel also shows Leader node port and the Oldest node port. The Leader node is responsible for making cluster state changes. The Oldest node is of interest when using
+[cluster singleton actors](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#singleton-manager).
+Cluster singletons will be covered in more detail in the
+[akka-typed-java-cluster-singleton](https://github.com/mckeeh3/akka-typed-java-cluster-singleton)
+project in this series.
+
+The right-hand side of the dashboard shows the current state of the cluster from the perspective of each of the currently running cluster nodes. The dashboard asks each node for its current view of the cluster. The JavaScript in the dashboard sends an HTTP request to each of the nine nodes in the cluster. The currently running nodes each return a JSON response that contains that node's state and what it knows about the current state of the cluster.
+
+~~~java
+private static void startupClusterNodes(List<String> ports) {
+    System.out.printf("Start cluster on port(s) %s%n", ports);
+
+    ports.forEach(port -> {
+        ActorSystem<Void> actorSystem = ActorSystem.create(Main.create(), "cluster", setupClusterNodeConfig(port));
+        AkkaManagement.get(actorSystem.classicSystem()).start();
+        HttpServer.start(actorSystem);
+    });
+}
+~~~
+
+The server-side that responds to the incoming HTTP requests from the client-side JavaScript is handled in the `HttpServer` class. As shown above, the `Runner` class creates an instance of the `HttpServer` class.
+
+~~~java
+private HttpResponse handleHttpRequest(HttpRequest httpRequest) {
+    //log().info("HTTP request '{}'", httpRequest.getUri().path());
+    switch (httpRequest.getUri().path()) {
+        case "/":
+            return htmlFileResponse("dashboard.html");
+        case "/dashboard.js":
+            return jsFileResponse("dashboard.js");
+        case "/p5.js":
+            return jsFileResponse("p5.js");
+        case "/p5.sound.js":
+            return jsFileResponse("p5.sound.js");
+        case "/cluster-state":
+            return jsonResponse();
+        default:
+            return HttpResponse.create().withStatus(404);
+    }
+}
+~~~
+
+Akka HTTP handles the routing and processing of requests in the `handleHttpRequest` method shown above.
+
+~~~java
+case "/cluster-state":
+    return jsonResponse();
+~~~
+
+The web client sends an HTTP request to the `/cluster-state` endpoint. This invokes the `jsonResponse` method.  
+
+~~~java
+private HttpResponse jsonResponse() {
+    try {
+        String jsonContents = loadNodes(actorSystem).toJson();
+        return HttpResponse.create()
+                .withEntity(ContentTypes.create(MediaTypes.APPLICATION_JAVASCRIPT, HttpCharsets.UTF_8), jsonContents)
+                .withHeaders(Collections.singletonList(HttpHeader.parse("Access-Control-Allow-Origin", "*")))
+                .withStatus(StatusCodes.ACCEPTED);
+    } catch (Exception e) {
+        log().error("I/O error on JSON response");
+        return HttpResponse.create().withStatus(StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}
+~~~
+
+The above `jsonResponse` method invokes the `loadNodes` method. `loadNodes` does all of the work retrieving the cluster information from the perspective of that node. Note that the HTTP response includes an `Access-Control-Allow-Origin *` HTTP header. This header allows cross-domain access from the web client to each of the up to nine running cluster nodes.
+
+~~~java
+private static Nodes loadNodes(ActorSystem<Void> actorSystem) {
+    final Cluster cluster = Cluster.get(actorSystem);
+    final ClusterEvent.CurrentClusterState clusterState = cluster.state();
+
+    final Set<Member> unreachable = clusterState.getUnreachable();
+
+    final Optional<Member> old = StreamSupport.stream(clusterState.getMembers().spliterator(), false)
+            .filter(member -> member.status().equals(MemberStatus.up()))
+            .filter(member -> !(unreachable.contains(member)))
+            .reduce((older, member) -> older.isOlderThan(member) ? older : member);
+
+    final Member oldest = old.orElse(cluster.selfMember());
+
+    final List<Integer> seedNodePorts = seedNodePorts(actorSystem);
+
+    final Nodes nodes = new Nodes(
+            memberPort(cluster.selfMember()),
+            cluster.selfMember().address().equals(clusterState.getLeader()),
+            oldest.equals(cluster.selfMember()));
+
+    StreamSupport.stream(clusterState.getMembers().spliterator(), false)
+            .forEach(new Consumer<Member>() {
+                @Override
+                public void accept(Member member) {
+                    nodes.add(member, leader(member), oldest(member), seedNode(member));
+                }
+
+                private boolean leader(Member member) {
+                    return member.address().equals(clusterState.getLeader());
+                }
+
+                private boolean oldest(Member member) {
+                    return oldest.equals(member);
+                }
+
+                private boolean seedNode(Member member) {
+                    return seedNodePorts.contains(memberPort(member));
+                }
+            });
+
+    clusterState.getUnreachable()
+            .forEach(nodes::addUnreachable);
+
+    return nodes;
+}
+~~~
+
+The `loadNodes` method uses the `ClusterEvent.CurrentClusterState` Akka class to retrieve information about each of the currently running cluster nodes. The cluster state information is loaded into an instance of the `Nodes` class. The `Nodes` class contains a list of `Node` class instances, which contain information about each of the currently running cluster nodes.
+
+It is essential to understand that the cluster state retrieved from each node represents how each specific node currently sees the other nodes in the cluster.
+
+While it is relatively easy to retrieve cluster state information, the actual process of communicating cluster state changes across the cluster is complex. Fortunately, maintaining the cluster state is managed within the Akka actor systems running on each node.
+
+Once all of the cluster state information has been loaded into the `Nodes` class instance, along with its list of nodes, the entire object is serialized to JSON and returned to the web client in an HTTP response.
+
+The web client assembles the JSON responses from each of the currently running cluster nodes and renders that information into the nine node panels on the right side of the dashboard. The current leader node information is also rendered on the left side of the dashboard.
+
+By design, it is possible to observe the propagation of cluster state changes across the nodes in the dashboard. By polling each node in the cluster, it is possible to see some of the latency as cluster state changes propagate across the network.
+
+The dashboard shows cluster state changes as they happen. Use this feature to explore how the cluster reacts as nodes join and leave the cluster. Try starting a cluster and then stopping, killing, or downing nodes and observe how this impacts the overall cluster state.
