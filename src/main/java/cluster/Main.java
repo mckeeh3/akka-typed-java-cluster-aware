@@ -36,7 +36,6 @@ class Main {
     final String port = Arrays.asList(args).get(0);
     final ActorSystem<?> actorSystem = ActorSystem.create(cluster.Main.create(), "cluster", setupClusterNodeConfig(port));
     AkkaManagement.get(actorSystem.classicSystem()).start();
-    HttpServer.start(actorSystem);
   }
 
   private static Config setupClusterNodeConfig(String port) {
