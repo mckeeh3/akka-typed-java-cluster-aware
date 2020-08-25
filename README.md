@@ -299,7 +299,7 @@ The tick message is based on another common actor messaging pattern where an act
   timers.startTimerAtFixedRate(Tick.Instance, tickInterval);
 ~~~
 
-On a specified interval, a tick message is sent to this actor instance. Each tick message triggers send ping messages to all of the other registered actor instances.
+On a specified interval, a tick message is sent to this actor instance. Each tick message triggers sending ping messages to all of the other registered actor instances.
 
 ~~~java
 private Behavior<Message> onTick() {
@@ -313,7 +313,7 @@ private Behavior<Message> onTick() {
 
 The `pingUpColleagues` method does the heavy lifting. It is responsible for only sending ping messages to the other registered actors that are running on Akka cluster nodes in an "up" state. Also, note that a message is sent to the HTTP server actor passing along a message that contains ping statistics that are shown on the dashboard.
 
-The `onPing` method is invoked When a ping message is received.
+The `onPing` method is invoked when a ping message is received.
 
 ~~~java
 private Behavior<Message> onPing(Ping ping) {
@@ -326,7 +326,7 @@ private Behavior<Message> onPing(Ping ping) {
 
 These incoming messages trigger a reply pong message to the sender. The ping statistics are also updated.
 
-Finally, pong messages received in response to previous ping messages sent from this actor instance, are logged when received.
+Finally, pong messages received in response to previous ping messages sent from this actor instance are logged when received.
 
 ~~~java
 private Behavior<Message> onPong(Pong pong) {
