@@ -25,7 +25,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
   private final PingStatistics pingStatistics = new PingStatistics();
   private final ActorRef<HttpServer.PingStatistics> httpServerActor;
   private Set<ActorRef<Message>> serviceInstances;
-  private static final Duration tickInterval = Duration.ofMillis(500);
+  private static final Duration tickInterval = Duration.ofMillis(100 + Math.round(900 * Math.random()));
 
   static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
