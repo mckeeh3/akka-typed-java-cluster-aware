@@ -7,6 +7,7 @@ import akka.cluster.MemberStatus;
 import akka.cluster.typed.Cluster;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.model.ContentTypes;
+import akka.http.javadsl.model.MediaTypes;
 import akka.http.javadsl.model.headers.RawHeader;
 import akka.http.javadsl.server.Route;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -55,6 +56,7 @@ class HttpServer {
         path("dashboard.js", () -> getFromResource("dashboard.js", ContentTypes.APPLICATION_JSON)),
         path("dashboard-cluster-aware.js", () -> getFromResource("dashboard-cluster-aware.js", ContentTypes.APPLICATION_JSON)),
         path("p5.js", () -> getFromResource("p5.js", ContentTypes.APPLICATION_JSON)),
+        path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType())),
         path("cluster-state", this::clusterState)
     );
   }
