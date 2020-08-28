@@ -25,7 +25,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
   private final PingStatistics pingStatistics = new PingStatistics();
   private final ActorRef<HttpServer.PingStatistics> httpServerActor;
   private Set<ActorRef<Message>> serviceInstances;
-  private static final Duration tickInterval = Duration.ofMillis(100 + Math.round(900 * Math.random()));
+  private static final Duration tickInterval = Duration.ofMillis(25 + Math.round(50 * Math.random())); // avg 50ms per tick
 
   static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
@@ -93,14 +93,14 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
   }
 
   private Behavior<Message> onPing(Ping ping) {
-    log().info("<=={}", ping);
+    logInfoIf(pingStatistics.totalPings % 100 == 0, "<=={}", ping);
     ping.replyTo.tell(new Pong(getContext().getSelf(), ping.start));
     pingStatistics.ping(ping.replyTo);
     return Behaviors.same();
   }
 
   private Behavior<Message> onPong(Pong pong) {
-    log().info("<--{}", pong);
+    logInfoIf(pingStatistics.totalPings % 100 == 0, "<--{}", pong);
     return Behaviors.same();
   }
 
@@ -109,7 +109,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
 
     if (iAmUp()) {
       final int size = serviceInstances.size() - 1;
-      log().info("Tick, ping {}", Math.max(size, 0));
+      logInfoIf(pingStatistics.totalPings % 100 == 0, "Tick, ping {}", Math.max(size, 0));
 
       final List<Address> upMembers = getUpMembers();
 
@@ -118,7 +118,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
           .filter(clusterAwareActorRef -> upMembers.contains(clusterAwareActorRef.path().address()))
           .forEach(clusterAwareActorRef -> clusterAwareActorRef.tell(new Ping(context.getSelf(), System.nanoTime())));
     } else {
-      log().info("Tick, no pings, this node is not up, {}", Cluster.get(context.getSystem()).selfMember());
+      logInfoIf(pingStatistics.totalPings % 100 == 0, "Tick, no pings, this node is not up, {}", Cluster.get(context.getSystem()).selfMember());
     }
   }
 
@@ -132,6 +132,12 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
         .filter(member -> MemberStatus.up().equals(member.status()))
         .map(Member::address)
         .collect(Collectors.toList());
+  }
+
+  private void logInfoIf(boolean log, String format, Object arg) {
+    if (log) {
+      log().info(format, arg);
+    }
   }
 
   private Logger log() {

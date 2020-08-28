@@ -40,8 +40,8 @@ const clusterAware = {
                           .setValueColor(color(255))
                           .draw();
 
-                  const progress = nodePings % 10;
-                  const length = 9 / 10 * (progress == 0 ? 10 : progress);
+                  const progress = nodePings % 100;
+                  const length = 9 / 100 * (progress == 0 ? 1 : progress);
 
                   strokeWeight(0);
                   fill(color(29, 249, 246, 30));
