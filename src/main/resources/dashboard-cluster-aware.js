@@ -4,25 +4,27 @@ const clusterAware = {
   clusterStateUpdateNode: function (clusterStateFromNode) {
     const selfPort = clusterStateFromNode.selfPort;
 
-    clusterState.members[selfPort - 2551].pingStatistics = clusterStateFromNode.pingStatistics;
+    clusterState.members[selfPort - 2551].clusterAwareStatistics = clusterStateFromNode.clusterAwareStatistics;
   },
 
   nodeDetails: function (x, y, w, h, nodeNo) {
       const selfPort = 2551 + nodeNo;
-      const pingStatistics = clusterState.members[nodeNo].pingStatistics;
+      const clusterAwareStatistics = clusterState.members[nodeNo].clusterAwareStatistics;
 
-      if (pingStatistics) {
+      if (clusterAwareStatistics) {
           Label().setX(x).setY(y + 2).setW(9).setH(1)
                   .setBorder(0.25)
                   .setKey("Cluster Aware")
+                  .setValue(clusterAwareStatistics.pingRatePs + "/s")
                   .setBgColor(color(100, 75))
                   .setKeyColor(color(255, 191, 0))
+                  .setValueColor(color(255))
                   .draw();
 
           Label().setX(x).setY(y + 3).setW(9).setH(1)
                   .setBorder(0.25)
                   .setKey("Total pings")
-                  .setValue(pingStatistics.totalPings.toLocaleString())
+                  .setValue(clusterAwareStatistics.totalPings.toLocaleString())
                   .setKeyColor(color(29, 249, 246))
                   .setValueColor(color(255))
                   .draw();
@@ -30,7 +32,7 @@ const clusterAware = {
           var lineY = y + 4;
           for (var p = 0; p < 9; p++) {
               const port = 2551 + p;
-              const nodePings = pingStatistics.nodePings[port];
+              const nodePings = clusterAwareStatistics.nodePings[port];
               if (nodePings && port != selfPort) {
                   Label().setX(x).setY(lineY++).setW(9).setH(1)
                           .setBorder(0.25)

@@ -24,7 +24,7 @@ class Main {
   private static void bootstrap(final ActorContext<Void> context) {
     context.spawn(ClusterListenerActor.create(), "clusterListener");
 
-    final ActorRef<HttpServer.PingStatistics> httpServerActorRef = context.spawn(HttpServerActor.create(), HttpServerActor.class.getSimpleName());
+    final ActorRef<HttpServer.Statistics> httpServerActorRef = context.spawn(HttpServerActor.create(), HttpServerActor.class.getSimpleName());
 
     context.spawn(ClusterAwareActor.create(httpServerActorRef), ClusterAwareActor.class.getSimpleName());
   }

@@ -10,6 +10,7 @@ import akka.http.javadsl.model.ContentTypes;
 import akka.http.javadsl.model.MediaTypes;
 import akka.http.javadsl.model.headers.RawHeader;
 import akka.http.javadsl.server.Route;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -26,7 +27,7 @@ import static akka.http.javadsl.server.Directives.*;
 
 class HttpServer {
   private final ActorSystem<?> actorSystem;
-  private PingStatistics pingStatistics;
+  private ClusterAwareStatistics clusterAwareStatistics;
 
   static HttpServer start(ActorSystem<?> actorSystem) {
     final int port = memberPort(Cluster.get(actorSystem).selfMember());
@@ -64,11 +65,11 @@ class HttpServer {
   private Route clusterState() {
     return get(
         () -> respondWithHeader(RawHeader.create("Access-Control-Allow-Origin", "*"),
-            () -> complete(loadNodes(actorSystem, pingStatistics).toJson()))
+            () -> complete(loadNodes(actorSystem, clusterAwareStatistics).toJson()))
     );
   }
 
-  private static Nodes loadNodes(ActorSystem<?> actorSystem, PingStatistics pingStatistics) {
+  private static Nodes loadNodes(ActorSystem<?> actorSystem, ClusterAwareStatistics clusterAwareStatistics) {
     final Cluster cluster = Cluster.get(actorSystem);
     final ClusterEvent.CurrentClusterState clusterState = cluster.state();
 
@@ -87,7 +88,7 @@ class HttpServer {
         memberPort(cluster.selfMember()),
         cluster.selfMember().address().equals(clusterState.getLeader()),
         oldest.equals(cluster.selfMember()),
-        pingStatistics);
+        clusterAwareStatistics);
 
     StreamSupport.stream(clusterState.getMembers().spliterator(), false)
         .forEach(new Consumer<Member>() {
@@ -139,16 +140,21 @@ class HttpServer {
         }).collect(Collectors.toList());
   }
 
-  void load(PingStatistics pingStatistics) {
-    this.pingStatistics = pingStatistics;
+  public interface Statistics {
   }
 
-  public static class PingStatistics implements Serializable {
+  void load(ClusterAwareStatistics clusterAwareStatistics) {
+    this.clusterAwareStatistics = clusterAwareStatistics;
+  }
+
+  public static class ClusterAwareStatistics implements Statistics, Serializable {
     public final int totalPings;
+    public final int pingRatePs;
     public final Map<Integer, Integer> nodePings;
 
-    public PingStatistics(int totalPings, Map<Integer, Integer> nodePings) {
+    public ClusterAwareStatistics(int totalPings, int pingRatePs, Map<Integer, Integer> nodePings) {
       this.totalPings = totalPings;
+      this.pingRatePs = pingRatePs;
       this.nodePings = nodePings;
     }
   }
@@ -157,14 +163,14 @@ class HttpServer {
     public final int selfPort;
     public final boolean leader;
     public final boolean oldest;
-    public final PingStatistics pingStatistics;
+    public final ClusterAwareStatistics clusterAwareStatistics;
     public List<Node> nodes = new ArrayList<>();
 
-    public Nodes(int selfPort, boolean leader, boolean oldest, PingStatistics pingStatistics) {
+    public Nodes(int selfPort, boolean leader, boolean oldest, ClusterAwareStatistics clusterAwareStatistics) {
       this.selfPort = selfPort;
       this.leader = leader;
       this.oldest = oldest;
-      this.pingStatistics = pingStatistics;
+      this.clusterAwareStatistics = clusterAwareStatistics;
     }
 
     void add(Member member, boolean leader, boolean oldest, boolean seedNode) {

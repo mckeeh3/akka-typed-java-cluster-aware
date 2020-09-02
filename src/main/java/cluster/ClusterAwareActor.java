@@ -15,6 +15,7 @@ import scala.Option;
 
 import java.io.Serializable;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -23,13 +24,19 @@ import java.util.stream.StreamSupport;
 
 public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Message> {
   private final PingStatistics pingStatistics = new PingStatistics();
-  private final ActorRef<HttpServer.PingStatistics> httpServerActor;
+  private final ActorRef<HttpServer.Statistics> httpServerActor;
   private Set<ActorRef<Message>> serviceInstances;
   private static final Duration tickInterval = Duration.ofMillis(25 + Math.round(50 * Math.random())); // avg 50ms per tick
 
   static final ServiceKey<Message> serviceKey = ServiceKey.create(Message.class, ClusterAwareActor.class.getSimpleName());
 
-  private ClusterAwareActor(ActorContext<Message> context, TimerScheduler<Message> timers, ActorRef<HttpServer.PingStatistics> httpServerActor) {
+  static Behavior<Message> create(ActorRef<HttpServer.Statistics> httpServerActor) {
+    return Behaviors.setup(context ->
+        Behaviors.withTimers(timers ->
+            new ClusterAwareActor(context, timers, httpServerActor)));
+  }
+
+  private ClusterAwareActor(ActorContext<Message> context, TimerScheduler<Message> timers, ActorRef<HttpServer.Statistics> httpServerActor) {
     super(context);
     this.httpServerActor = httpServerActor;
 
@@ -45,12 +52,6 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
         .onMessage(Ping.class, this::onPing)
         .onMessage(Pong.class, this::onPong)
         .build();
-  }
-
-  static Behavior<Message> create(ActorRef<HttpServer.PingStatistics> httpServerActor) {
-    return Behaviors.setup(context ->
-        Behaviors.withTimers(timers ->
-            new ClusterAwareActor(context, timers, httpServerActor)));
   }
 
   private void receptionistRegisterSubscribe(ActorContext<Message> context) {
@@ -86,8 +87,9 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
 
   private Behavior<Message> onTick() {
     pingUpColleagues();
-    httpServerActor.tell(new HttpServer.PingStatistics(
+    httpServerActor.tell(new HttpServer.ClusterAwareStatistics(
         pingStatistics.totalPings,
+        pingStatistics.pingRatePs,
         Collections.unmodifiableMap(pingStatistics.nodePings)));
     return Behaviors.same();
   }
@@ -193,7 +195,9 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
 
   static class PingStatistics {
     int totalPings = 0;
-    Map<Integer, Integer> nodePings = new HashMap<>();
+    int pingRatePs = 0;
+    final Instant startTime = Instant.now();
+    final Map<Integer, Integer> nodePings = new HashMap<>();
 
     PingStatistics() {
       IntStream.rangeClosed(2551, 2559).forEach(p -> nodePings.put(p, 0));
@@ -201,6 +205,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
 
     void ping(ActorRef<Message> actorRef) {
       ++totalPings;
+      pingRatePs = (int) (totalPings / Math.max(1, Duration.between(startTime, Instant.now()).toSeconds()));
 
       final int port = actorRefPort(actorRef);
       if (port >= 2551 && port <= 2559) {
