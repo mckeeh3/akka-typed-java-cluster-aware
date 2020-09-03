@@ -2,16 +2,19 @@
 
 ### Introduction
 
-This is a Java, Maven, Akka project that demonstrates how to setup a basic
-[Akka Cluster](https://doc.akka.io/docs/akka/current/typed/index-cluster.html).
+This is an Akka Cluster, Java, Maven project that includes an example use of
+[Cluster Singleton](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#cluster-singleton),
+the [Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist),
+[Cluster Subscriptions](https://doc.akka.io/docs/akka/current/typed/cluster.html#cluster-subscriptions)
+and cluster dashboard.
 
-This project is one in a series of projects that starts with a simple Akka Cluster project and progressively builds up to examples of event sourcing and command query responsibility segregation.
+This project is one in a series of projects that starts with a simple Akka Cluster project and progressively builds up to examples of event sourcing and command query responsibility segregation - CQRS.
 
 The project series is composed of the following GitHub repos:
 * [akka-typed-java-cluster](https://github.com/mckeeh3/akka-typed-java-cluster)
 * [akka-typed-java-cluster-sbr](https://github.com/mckeeh3/akka-typed-java-cluster-sbr)
 * [akka-typed-java-cluster-aware](https://github.com/mckeeh3/akka-typed-java-cluster-aware) (this project)
-* [akka-typed-java-cluster-singleton](https://github.com/mckeeh3/akka-typed-java-cluster-singleton) (coming soon)
+* [akka-typed-java-cluster-singleton](https://github.com/mckeeh3/akka-typed-java-cluster-singleton)
 * [akka-typed-java-cluster-sharding](https://github.com/mckeeh3/akka-typed-java-cluster-sharding) (coming soon)
 * [akka-typed-java-cluster-persistence](https://github.com/mckeeh3/akka-typed-java-cluster-persistence) (coming soon)
 * [akka-typed-java-cluster-persistence-query](https://github.com/mckeeh3/akka-typed-java-cluster-persistence-query) (coming soon)
@@ -467,8 +470,8 @@ extension
 Included in this project is a cluster dashboard. The dashboard visualizes live information about a running cluster.  
 
 ~~~bash
-$ git clone https://github.com/mckeeh3/akka-typed-java-cluster.git
-$ cd akka-typed-java-cluster
+$ git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
+$ cd akka-typed-java-cluster-aware
 $ mvn clean package
 $ ./akka cluster start
 $ ./akka cluster dashboard
@@ -526,111 +529,91 @@ project in this series.
 The right-hand side of the dashboard shows the current state of the cluster from the perspective of each of the currently running cluster nodes. The dashboard asks each node for its current view of the cluster. The JavaScript in the dashboard sends an HTTP request to each of the nine nodes in the cluster. The currently running nodes each return a JSON response that contains that node's state and what it knows about the current state of the cluster.
 
 ~~~java
-private static void startupClusterNodes(List<String> ports) {
-    System.out.printf("Start cluster on port(s) %s%n", ports);
+  HttpServerActor(ActorContext<HttpServer.Statistics> context) {
+    this.context = context;
 
-    ports.forEach(port -> {
-        ActorSystem<Void> actorSystem = ActorSystem.create(Main.create(), "cluster", setupClusterNodeConfig(port));
-        AkkaManagement.get(actorSystem.classicSystem()).start();
-        HttpServer.start(actorSystem);
-    });
-}
+    httpServer = HttpServer.start(context.getSystem());
+  }
 ~~~
 
-The server-side that responds to the incoming HTTP requests from the client-side JavaScript is handled in the `HttpServer` class. As shown above, the `Runner` class creates an instance of the `HttpServer` class.
+The server-side that responds to the incoming HTTP requests from the client-side JavaScript is handled in the `HttpServer` class. As shown above, the `HttpServerActor` class creates an instance of the `HttpServer` class.
 
 ~~~java
-private HttpResponse handleHttpRequest(HttpRequest httpRequest) {
-    //log().info("HTTP request '{}'", httpRequest.getUri().path());
-    switch (httpRequest.getUri().path()) {
-        case "/":
-            return htmlFileResponse("dashboard.html");
-        case "/dashboard.js":
-            return jsFileResponse("dashboard.js");
-        case "/p5.js":
-            return jsFileResponse("p5.js");
-        case "/p5.sound.js":
-            return jsFileResponse("p5.sound.js");
-        case "/cluster-state":
-            return jsonResponse();
-        default:
-            return HttpResponse.create().withStatus(404);
-    }
-}
+  private Route route() {
+    return concat(
+        path("", () -> getFromResource("dashboard.html", ContentTypes.TEXT_HTML_UTF8)),
+        path("dashboard.html", () -> getFromResource("dashboard.html", ContentTypes.TEXT_HTML_UTF8)),
+        path("dashboard.js", () -> getFromResource("dashboard.js", ContentTypes.APPLICATION_JSON)),
+        path("dashboard-cluster-aware.js", () -> getFromResource("dashboard-cluster-aware.js", ContentTypes.APPLICATION_JSON)),
+        path("p5.js", () -> getFromResource("p5.js", ContentTypes.APPLICATION_JSON)),
+        path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType())),
+        path("cluster-state", this::clusterState)
+    );
+  }
 ~~~
 
-Akka HTTP handles the routing and processing of requests in the `handleHttpRequest` method shown above.
+Akka HTTP handles the routing and processing of requests as defined in the `route` method shown above.
 
 ~~~java
-case "/cluster-state":
-    return jsonResponse();
+  private Route clusterState() {
+    return get(
+        () -> respondWithHeader(RawHeader.create("Access-Control-Allow-Origin", "*"),
+            () -> complete(loadNodes(actorSystem, clusterAwareStatistics).toJson()))
+    );
+  }
 ~~~
 
-The web client sends an HTTP request to the `/cluster-state` endpoint. This invokes the `jsonResponse` method.  
+The web client sends an HTTP request to the `/cluster-state` endpoint. This invokes the `loadNodes` method.  
+
+The `loadNodes` does all of the work retrieving the cluster information from the perspective of that node. Note that the HTTP response includes an `Access-Control-Allow-Origin *` HTTP header. This header allows cross-domain access from the web client to each of the up to nine running cluster nodes.
 
 ~~~java
-private HttpResponse jsonResponse() {
-    try {
-        String jsonContents = loadNodes(actorSystem).toJson();
-        return HttpResponse.create()
-                .withEntity(ContentTypes.create(MediaTypes.APPLICATION_JAVASCRIPT, HttpCharsets.UTF_8), jsonContents)
-                .withHeaders(Collections.singletonList(HttpHeader.parse("Access-Control-Allow-Origin", "*")))
-                .withStatus(StatusCodes.ACCEPTED);
-    } catch (Exception e) {
-        log().error("I/O error on JSON response");
-        return HttpResponse.create().withStatus(StatusCodes.INTERNAL_SERVER_ERROR);
-    }
-}
-~~~
-
-The above `jsonResponse` method invokes the `loadNodes` method. `loadNodes` does all of the work retrieving the cluster information from the perspective of that node. Note that the HTTP response includes an `Access-Control-Allow-Origin *` HTTP header. This header allows cross-domain access from the web client to each of the up to nine running cluster nodes.
-
-~~~java
-private static Nodes loadNodes(ActorSystem<Void> actorSystem) {
+  private static Nodes loadNodes(ActorSystem<?> actorSystem, ClusterAwareStatistics clusterAwareStatistics) {
     final Cluster cluster = Cluster.get(actorSystem);
     final ClusterEvent.CurrentClusterState clusterState = cluster.state();
 
     final Set<Member> unreachable = clusterState.getUnreachable();
 
     final Optional<Member> old = StreamSupport.stream(clusterState.getMembers().spliterator(), false)
-            .filter(member -> member.status().equals(MemberStatus.up()))
-            .filter(member -> !(unreachable.contains(member)))
-            .reduce((older, member) -> older.isOlderThan(member) ? older : member);
+        .filter(member -> member.status().equals(MemberStatus.up()))
+        .filter(member -> !(unreachable.contains(member)))
+        .reduce((older, member) -> older.isOlderThan(member) ? older : member);
 
     final Member oldest = old.orElse(cluster.selfMember());
 
     final List<Integer> seedNodePorts = seedNodePorts(actorSystem);
 
     final Nodes nodes = new Nodes(
-            memberPort(cluster.selfMember()),
-            cluster.selfMember().address().equals(clusterState.getLeader()),
-            oldest.equals(cluster.selfMember()));
+        memberPort(cluster.selfMember()),
+        cluster.selfMember().address().equals(clusterState.getLeader()),
+        oldest.equals(cluster.selfMember()),
+        clusterAwareStatistics);
 
     StreamSupport.stream(clusterState.getMembers().spliterator(), false)
-            .forEach(new Consumer<Member>() {
-                @Override
-                public void accept(Member member) {
-                    nodes.add(member, leader(member), oldest(member), seedNode(member));
-                }
+        .forEach(new Consumer<Member>() {
+          @Override
+          public void accept(Member member) {
+            nodes.add(member, leader(member), oldest(member), seedNode(member));
+          }
 
-                private boolean leader(Member member) {
-                    return member.address().equals(clusterState.getLeader());
-                }
+          private boolean leader(Member member) {
+            return member.address().equals(clusterState.getLeader());
+          }
 
-                private boolean oldest(Member member) {
-                    return oldest.equals(member);
-                }
+          private boolean oldest(Member member) {
+            return oldest.equals(member);
+          }
 
-                private boolean seedNode(Member member) {
-                    return seedNodePorts.contains(memberPort(member));
-                }
-            });
+          private boolean seedNode(Member member) {
+            return seedNodePorts.contains(memberPort(member));
+          }
+        });
 
     clusterState.getUnreachable()
-            .forEach(nodes::addUnreachable);
+        .forEach(nodes::addUnreachable);
 
     return nodes;
-}
+  }
 ~~~
 
 The `loadNodes` method uses the `ClusterEvent.CurrentClusterState` Akka class to retrieve information about each of the currently running cluster nodes. The cluster state information is loaded into an instance of the `Nodes` class. The `Nodes` class contains a list of `Node` class instances, which contain information about each of the currently running cluster nodes.
@@ -643,6 +626,6 @@ Once all of the cluster state information has been loaded into the `Nodes` class
 
 The web client assembles the JSON responses from each of the currently running cluster nodes and renders that information into the nine node panels on the right side of the dashboard. The current leader node information is also rendered on the left side of the dashboard.
 
-By design, it is possible to observe the propagation of cluster state changes across the nodes in the dashboard. By polling each node in the cluster, it is possible to see some of the latency as cluster state changes propagate across the network.
+By design, it is possible to observe the propagation of cluster state changes across the nodes in the dashboard. By polling each node in the cluster, it is possible to see some of the latency as cluster state changes propagate across the network to each node in the cluster.
 
 The dashboard shows cluster state changes as they happen. Use this feature to explore how the cluster reacts as nodes join and leave the cluster. Try starting a cluster and then stopping, killing, or downing nodes and observe how this impacts the overall cluster state.
