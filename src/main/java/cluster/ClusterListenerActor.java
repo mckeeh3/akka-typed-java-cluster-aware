@@ -86,15 +86,5 @@ class ClusterListenerActor extends AbstractBehavior<ClusterEvent.ClusterDomainEv
             return unreachable.contains(member) ? "(UNREACHABLE) " : "";
           }
         });
-
-    currentClusterState.getUnreachable()
-        .forEach(new Consumer<Member>() {
-          int m = 0;
-
-          @Override
-          public void accept(Member member) {
-            log.info("{} - {} {} (unreachable)", getClass().getSimpleName(), ++m, member);
-          }
-        });
   }
 }
