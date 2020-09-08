@@ -3,7 +3,6 @@
 ### Introduction
 
 This is an Akka Cluster, Java, Maven project that includes an example use of
-[Cluster Singleton](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#cluster-singleton),
 the [Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist),
 [Cluster Subscriptions](https://doc.akka.io/docs/akka/current/typed/cluster.html#cluster-subscriptions)
 and cluster dashboard.
@@ -25,15 +24,15 @@ Each project can be cloned, built, and runs independently of the other projects.
 
 Before we get into the details of how this project is set up as a cluster-aware example, let's first use a simple example scenario. In this example, we'll use a basic chat room app. As people enter the chat room, they can see who else is in the chat room. Every person in the chat room is given a simple set of instructions, send a message with the word "ping" every minute to all of the other people currently in the chat room. When you receive a "ping" message, respond to the sender with a "pong" message.
 
-In this example, each person in the chat room is essentially a simple actor following a simple set of instructions. Also, each person is aware of who else is in the chat room and that all of the other participants follow the same set of instructions.
+In this example, each person in the chat room is essentially an actor following a simple set of instructions. Also, each person is aware of who else is in the chat room and that all of the other participants follow the same set of instructions.
 
-This example scenario is similar to the fundamental approach used by cluster-aware actors. Cluster-aware actor classes are implemented to expect an instance of the actor running on each node in a cluster.
+This example scenario is similar to the fundamental approach used by cluster-aware actors. One pattern for cluster-aware actors is classes that are implemented to expect an instance of the actor to be running on each node in a cluster. This is the pattern used in this example project.
 
-A receptionist is used to facilitate this type of messaging behavior. The [Akka Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist) provides the ability for actors to be aware of other actors located on nodes across the cluster. The receptionist's basic functionality is that other actors send the receptionist messages that are used to register actors and to subscribe to receive messages from the receptionist when actors register and drop from the registration list.
+A receptionist is used to facilitate this type of messaging behavior. The [Akka Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist) provides the ability for actors to be aware of other actors located on nodes across the cluster. The receptionist's basic functionality is that other actors send the receptionist messages that are used to register actors and to subscribe to receive messages from the receptionist when actors register to and are dropped from the registration list.
 
 Message routing is the most common cluster-aware usage pattern. Messages sent to cluster-aware router actors are forwarded to other actors that are distributed across the cluster. For example, router actors work in conjunction with worker actors. Messages contain a worker identifier. These messages may be sent to any of the router actors running on each node in the cluster. When a router actor receives each message, it looks at the worker id provided in the message to determine if the message should be routed to a local or remote worker actor. If the message is for a local actor, the router forwards it to the local worker. For messages that belong to remote workers, the router forwards the message to the remote router actor responsible for handling messages for the targeted worker actor. When the remote router actor receives the forwarded message, it goes through the same routing process.
 
-This project includes a simple cluster-aware actor that periodically sends ping messages and responds to ping messages with pong messages sent back to the pinger. The key thing to understand that this messaging is happening between Akka cluster nodes, each node is running as a separate JVM, and the messages are sent over the network.
+This project includes a simple cluster-aware actor that periodically sends ping messages and responds to ping messages with pong messages sent back to the pinger. The key thing to understand is that this messaging is happening between Akka cluster nodes, each node is running as a separate JVM, and the messages are sent over the network.
 
 ~~~java
 package cluster;
@@ -437,7 +436,7 @@ Stop node 5 on port 2555
 Stop node 7 on port 2557
 ~~~
 
-Start node 3, 5, and 7 on ports 2553, 2555 and2557.
+Start node 3, 5, and 7 on ports 2553, 2555 and 2557.
 ~~~bash
 $ ./akka node start 3 5 7
 Start node 3 on port 2553, management port 8553, HTTP port 9553
@@ -474,7 +473,7 @@ $ git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
 $ cd akka-typed-java-cluster-aware
 $ mvn clean package
 $ ./akka cluster start
-$ ./akka cluster dashboard
+$ ./akka cluster dashboard # wait for a few seconds while the nodes in the cluster start up
 ~~~
 Follow the steps above to download, build, run, and bring up a dashboard in your default web browser.
 
@@ -497,7 +496,7 @@ Start node 6 on port 2556, management port 8556, HTTP port 9556
 
 ![Dashboard 2](docs/images/akka-typed-java-cluster-aware-dashboard-02.png)
 
-Note that node 1 and 6 remain in a "weekly up" state. (You can learn more about Akka clusters in the
+Note that nodes 1 and 6 remain in a "weekly up" state. (You can learn more about Akka clusters in the
 [Cluster Specification](https://doc.akka.io/docs/akka/current/typed/cluster-concepts.html#cluster-specification)
 and the
 [Cluster Membership Service](https://doc.akka.io/docs/akka/current/typed/cluster-membership.html#cluster-membership-service)
@@ -509,6 +508,16 @@ indicated by the "L" moves from node 1 to 2. The leader "L" is red, which indica
 
 The [oldest node](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#singleton-manager),
 indicated by the "O" in node 5, moved from node 1 to node 5. The visualization of the cluster state changes is shown in the dashboard as they happen.
+
+#### Cluster Aware Dashboard Message Statistics
+
+As each cluster aware actor receives `ping` messages it updates a list of ping statistics. The ping statistics maintains a list of ping message counters, one counter per sending actor. These ping statistics are rendered on the dashboard on the left. Each running node in the cluster is shown with the current list of the ping message counters. In the example shown below, it shows that this cluster aware actor running on node 2555 has so far received 32,676 ping messages from the remote cluster aware actor running on node 2551. Also note that the list includes a total ping message count and a message rate per second. In the below example, the rate shown is 186/s, this rate is the number of messages received per second from all other actors.
+
+![Dashboard 3](docs/images/akka-typed-java-cluster-aware-dashboard-03.png)
+
+Only cluster aware actors running on nodes in the `up` state are active. This is shown in the image below where node 2556 is in a `weaklyup` state. Note that the list of ping message counts in node 2559 no longer includes the two weakly up nodes 2551 and 2555, and it does not include the unreachable node 2557.
+
+![Dashboard 4](docs/images/akka-typed-java-cluster-aware-dashboard-04.png)
 
 ### How the Cluster Dashboard Works ###
 
