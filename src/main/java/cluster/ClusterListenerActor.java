@@ -54,13 +54,9 @@ class ClusterListenerActor extends AbstractBehavior<ClusterEvent.ClusterDomainEv
   }
 
   private void logClusterMembers() {
-    logClusterMembers(cluster.state());
-  }
-
-  private void logClusterMembers(ClusterEvent.CurrentClusterState currentClusterState) {
+    final ClusterEvent.CurrentClusterState currentClusterState = cluster.state();
     final Optional<Member> old = StreamSupport.stream(currentClusterState.getMembers().spliterator(), false)
         .reduce((older, member) -> older.isOlderThan(member) ? older : member);
-
     final Member oldest = old.orElse(cluster.selfMember());
     final Set<Member> unreachable = currentClusterState.getUnreachable();
     final String className = getClass().getSimpleName();
