@@ -158,6 +158,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
   }
 
   public static class Ping implements Message, Serializable {
+    private static final long serialVersionUID = 1L;
     public final ActorRef<Message> replyTo;
     public final long start;
 
@@ -174,6 +175,7 @@ public class ClusterAwareActor extends AbstractBehavior<ClusterAwareActor.Messag
   }
 
   public static class Pong implements Message, Serializable {
+    private static final long serialVersionUID = 1L;
     public final ActorRef<Message> replyFrom;
     public final long pingStart;
 
