@@ -1,7 +1,5 @@
 ## Akka Typed Java Cluster Aware Example
 
-### Introduction
-
 This is an Akka Cluster, Java, Maven project that includes an example use of
 the [Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist),
 [Cluster Subscriptions](https://doc.akka.io/docs/akka/current/typed/cluster.html#cluster-subscriptions)
