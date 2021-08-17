@@ -1,4 +1,4 @@
-## Akka Typed Java Cluster Aware Example
+# Akka Typed Java Cluster Aware Example
 
 This is an Akka Cluster, Java, Maven project that includes an example use of
 the [Receptionist](https://doc.akka.io/docs/akka/current/typed/actor-discovery.html#receptionist),
@@ -8,21 +8,29 @@ and cluster dashboard.
 This project is one in a series of projects that starts with a simple Akka Cluster project and progressively builds up to examples of event sourcing and command query responsibility segregation - CQRS.
 
 The project series is composed of the following GitHub repos:
+
 * [akka-typed-java-cluster](https://github.com/mckeeh3/akka-typed-java-cluster)
-* [akka-typed-java-cluster-sbr](https://github.com/mckeeh3/akka-typed-java-cluster-sbr)
 * [akka-typed-java-cluster-aware](https://github.com/mckeeh3/akka-typed-java-cluster-aware) (this project)
 * [akka-typed-java-cluster-singleton](https://github.com/mckeeh3/akka-typed-java-cluster-singleton)
 * [akka-typed-java-cluster-sharding](https://github.com/mckeeh3/akka-typed-java-cluster-sharding)
-* [woe-sim](https://github.com/mckeeh3/woe-sim) an example of 
+* [woe-sim](https://github.com/mckeeh3/woe-sim) an example of
 [Akka Persistence](https://doc.akka.io/docs/akka/current/typed/index-persistence.html)
-* [woe-twin](https://github.com/mckeeh3/woe-twin) an example of 
+* [woe-twin](https://github.com/mckeeh3/woe-twin) an example of
 [Akka Persistence](https://doc.akka.io/docs/akka/current/typed/index-persistence.html)
- and 
+ and
 [Akka Projections](https://doc.akka.io/docs/akka-projection/current/)
 
 Each project can be cloned, built, and runs independently of the other projects.
 
-### About Akka Clustering Awareness
+- [Akka Typed Java Cluster Aware Example](#akka-typed-java-cluster-aware-example)
+  - [About Akka Clustering Awareness](#about-akka-clustering-awareness)
+  - [Installation](#installation)
+  - [Run a cluster (Mac, Linux, Cygwin)](#run-a-cluster-mac-linux-cygwin)
+  - [The Cluster Dashboard](#the-cluster-dashboard)
+    - [Cluster Aware Dashboard Message Statistics](#cluster-aware-dashboard-message-statistics)
+    - [How the Cluster Dashboard Works](#how-the-cluster-dashboard-works)
+
+## About Akka Clustering Awareness
 
 Before we get into the details of how this project is set up as a cluster-aware example, let's first use a simple example scenario. In this example, we'll use a basic chat room app. As people enter the chat room, they can see who else is in the chat room. Every person in the chat room is given a simple set of instructions, send a message with the word "ping" every minute to all of the other people currently in the chat room. When you receive a "ping" message, respond to the sender with a "pong" message.
 
@@ -339,27 +347,29 @@ private Behavior<Message> onPong(Pong pong) {
 }
 ~~~
 
-### Installation
+## Installation
 
 ~~~bash
-$ git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
-$ cd akka-typed-java-cluster-aware
-$ mvn clean package
+git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
+cd akka-typed-java-cluster-aware
+mvn clean package
 ~~~
 
 The Maven command builds the project and creates a self contained runnable JAR.
 
-### Run a cluster (Mac, Linux, Cygwin)
+## Run a cluster (Mac, Linux, Cygwin)
 
 The project contains a set of scripts that can be used to start and stop individual cluster nodes or start and stop a cluster of nodes.
 
 The main script `./akka` is provided to run a cluster of nodes or start and stop individual nodes.
 
 ~~~bash
-$ ./akka
+./akka
 ~~~
+
 Run the akka script with no parameters to see the available options.
-~~~
+
+~~~text
 This CLI is used to start, stop and view the dashboard nodes in an Akka cluster.
 
 These commands manage the Akka cluster as defined in this project. A cluster
@@ -397,8 +407,12 @@ The `cluster` and `node` start options will start Akka nodes on ports 2551 throu
 Both `stdin` and `stderr` output is sent to a log files in the `/tmp` directory using the file naming convention `/tmp/<project-dir-name>-N.log`.
 
 Start a cluster of nine nodes running on ports 2551 to 2559.
+
 ~~~bash
-$ ./akka cluster start
+./akka cluster start
+~~~
+
+~~~text
 Starting 9 cluster nodes
 Start node 1 on port 2551, management port 8551, HTTP port 9551
 Start node 2 on port 2552, management port 8552, HTTP port 9552
@@ -412,8 +426,12 @@ Start node 9 on port 2559, management port 8559, HTTP port 9559
 ~~~
 
 Stop all currently running cluster nodes.
+
 ~~~bash
-$ ./akka cluster stop
+./akka cluster stop
+~~~
+
+~~~text
 Stop node 1 on port 2551
 Stop node 2 on port 2552
 Stop node 3 on port 2553
@@ -426,29 +444,45 @@ Stop node 9 on port 2559
 ~~~
 
 Stop node 3 on port 2553.
+
 ~~~bash
-$ ./akka node stop 3
+./akka node stop 3
+~~~
+
+~~~text
 Stop node 3 on port 2553
 ~~~
 
 Stop nodes 5 and 7 on ports 2555 and 2557.
+
 ~~~bash
-$ ./akka node stop 5 7
+./akka node stop 5 7
+~~~
+
+~~~text
 Stop node 5 on port 2555
 Stop node 7 on port 2557
 ~~~
 
 Start node 3, 5, and 7 on ports 2553, 2555 and 2557.
+
 ~~~bash
-$ ./akka node start 3 5 7
+./akka node start 3 5 7
+~~~
+
+~~~text
 Start node 3 on port 2553, management port 8553, HTTP port 9553
 Start node 5 on port 2555, management port 8555, HTTP port 9555
 Start node 7 on port 2557, management port 8557, HTTP port 9557
 ~~~
 
 Start a cluster of four nodes on ports 2551, 2552, 2553, and 2554.
+
 ~~~bash
-$ ./akka cluster start 4
+./akka cluster start 4
+~~~
+
+~~~text
 Starting 4 cluster nodes
 Start node 1 on port 2551, management port 8551, HTTP port 9551
 Start node 2 on port 2552, management port 8552, HTTP port 9552
@@ -457,8 +491,9 @@ Start node 4 on port 2554, management port 8554, HTTP port 9554
 ~~~
 
 Again, stop all currently running cluster nodes.
+
 ~~~bash
-$ ./akka cluster stop
+./akka cluster stop
 ~~~
 
 The `./akka cluster status` command displays the status of a currently running cluster in JSON format using the
@@ -466,17 +501,18 @@ The `./akka cluster status` command displays the status of a currently running c
 extension
 [Cluster Http Management](https://developer.lightbend.com/docs/akka-management/current/cluster-http-management.html).
 
-### The Cluster Dashboard ###
+## The Cluster Dashboard
 
 Included in this project is a cluster dashboard. The dashboard visualizes live information about a running cluster.  
 
 ~~~bash
-$ git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
-$ cd akka-typed-java-cluster-aware
-$ mvn clean package
-$ ./akka cluster start
-$ ./akka cluster dashboard # wait for a few seconds while the nodes in the cluster start up
+git clone https://github.com/mckeeh3/akka-typed-java-cluster-aware.git
+cd akka-typed-java-cluster-aware
+mvn clean package
+./akka cluster start
+./akka cluster dashboard # wait for a few seconds while the nodes in the cluster start up
 ~~~
+
 Follow the steps above to download, build, run, and bring up a dashboard in your default web browser.
 
 ![Dashboard 1](docs/images/akka-typed-java-cluster-aware-dashboard-01.png)
@@ -484,14 +520,27 @@ Follow the steps above to download, build, run, and bring up a dashboard in your
 The following sequence of commands changes the cluster state as shown below.
 
 ~~~bash
-$ ./akka node stop 1 6    
+./akka node stop 1 6
+~~~
+
+~~~text
 Stop node 1 on port 2551
 Stop node 6 on port 2556
+~~~
 
-$ ./akka node kill 7  
+~~~bash
+./akka node kill 7
+~~~
+
+~~~text
 Kill node 7 on port 2557
+~~~
 
-$ ./akka node start 1 6  
+~~~bash
+./akka node start 1 6
+~~~
+
+~~~text
 Start node 1 on port 2551, management port 8551, HTTP port 9551
 Start node 6 on port 2556, management port 8556, HTTP port 9556
 ~~~
@@ -511,7 +560,7 @@ indicated by the "L" moves from node 1 to 2. The leader "L" is red, which indica
 The [oldest node](https://doc.akka.io/docs/akka/current/typed/cluster-singleton.html#singleton-manager),
 indicated by the "O" in node 5, moved from node 1 to node 5. The visualization of the cluster state changes is shown in the dashboard as they happen.
 
-#### Cluster Aware Dashboard Message Statistics
+### Cluster Aware Dashboard Message Statistics
 
 As each cluster aware actor receives `ping` messages it updates a list of ping statistics. The ping statistics maintains a list of ping message counters, one counter per sending actor. These ping statistics are rendered on the dashboard on the left. Each running node in the cluster is shown with the current list of the ping message counters. In the example shown below, it shows that this cluster aware actor running on node 2555 has so far received 32,676 ping messages from the remote cluster aware actor running on node 2551. Also note that the list includes a total ping message count and a message rate per second. In the below example, the rate shown is 186/s, this rate is the number of messages received per second from all other actors.
 
@@ -521,7 +570,7 @@ Only cluster aware actors running on nodes in the `up` state are active. This is
 
 ![Dashboard 4](docs/images/akka-typed-java-cluster-aware-dashboard-04.png)
 
-### How the Cluster Dashboard Works ###
+### How the Cluster Dashboard Works
 
 When the dashboard web page loads, it kicks off included JavaScript code used to render the dashboard web page. The
 [p5.js JavaScript library](https://p5js.org/)
@@ -574,7 +623,7 @@ Akka HTTP handles the routing and processing of requests as defined in the `rout
   }
 ~~~
 
-The web client sends an HTTP request to the `/cluster-state` endpoint. This invokes the `loadNodes` method.  
+The web client sends an HTTP request to the `/cluster-state` endpoint. This invokes the `loadNodes` method.
 
 The `loadNodes` does all of the work retrieving the cluster information from the perspective of that node. Note that the HTTP response includes an `Access-Control-Allow-Origin *` HTTP header. This header allows cross-domain access from the web client to each of the up to nine running cluster nodes.
 
