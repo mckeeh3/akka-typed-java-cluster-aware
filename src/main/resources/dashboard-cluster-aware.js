@@ -35,8 +35,8 @@ const clusterAware = {
         .setValueColor(color(255))
         .draw();
 
-      var lineY = y + 4;
-      for (var p = 0; p < 9; p++) {
+      let lineY = y + 4;
+      for (let p = 0; p < 9; p++) {
         const port = 2551 + p;
         const nodePings = clusterAwareStatistics.nodePings[port];
         if (nodePings && port != selfPort) {
