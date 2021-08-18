@@ -297,7 +297,7 @@ function nodeColor(state) {
   return color(nodeColors[state]);
 }
 
-const = Label = function () {
+const Label = function () {
   return {
     setX: function (x) {
       this.x = x;
