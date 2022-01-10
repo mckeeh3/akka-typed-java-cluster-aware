@@ -54,19 +54,17 @@ class HttpServer {
     return concat(
         path("", () -> getFromResource("dashboard.html", ContentTypes.TEXT_HTML_UTF8)),
         path("dashboard.html", () -> getFromResource("dashboard.html", ContentTypes.TEXT_HTML_UTF8)),
-        path("dashboard.js", () -> getFromResource("dashboard.js", ContentTypes.APPLICATION_JSON)),
+        path("dashboard-main-aware.js", () -> getFromResource("dashboard-main-aware.js", ContentTypes.APPLICATION_JSON)),
         path("dashboard-cluster-aware.js", () -> getFromResource("dashboard-cluster-aware.js", ContentTypes.APPLICATION_JSON)),
         path("p5.js", () -> getFromResource("p5.js", ContentTypes.APPLICATION_JSON)),
         path("favicon.ico", () -> getFromResource("favicon.ico", MediaTypes.IMAGE_X_ICON.toContentType())),
-        path("cluster-state", this::clusterState)
-    );
+        path("cluster-state", this::clusterState));
   }
 
   private Route clusterState() {
     return get(
         () -> respondWithHeader(RawHeader.create("Access-Control-Allow-Origin", "*"),
-            () -> complete(loadNodes(actorSystem, clusterAwareStatistics).toJson()))
-    );
+            () -> complete(loadNodes(actorSystem, clusterAwareStatistics).toJson())));
   }
 
   private static Nodes loadNodes(ActorSystem<?> actorSystem, ClusterAwareStatistics clusterAwareStatistics) {
@@ -261,8 +259,10 @@ class HttpServer {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o)
+        return true;
+      if (o == null || getClass() != o.getClass())
+        return false;
       Node node = (Node) o;
       return Objects.equals(port, node.port);
     }

@@ -19,6 +19,7 @@
     <akka.version>2.6.18</akka.version>
     <akka.http.version>10.2.7</akka.http.version>
     <akka.management.version>1.1.2</akka.management.version>
+    <logback.version>1.2.6</logback.version>
   </properties>
 
   <dependencies>
@@ -81,7 +82,11 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
+<<<<<<< HEAD
       <version>1.2.10</version>
+=======
+      <version>${logback.version}</version>
+>>>>>>> 8f201be9025ce5fcf332f15e23fcf4917b61c737
     </dependency>
   </dependencies>
 
