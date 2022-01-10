@@ -16,9 +16,9 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>11</java.version>
     <scala.version>2.13</scala.version>
-    <akka.version>2.6.15</akka.version>
-    <akka.http.version>10.2.6</akka.http.version>
-    <akka.management.version>1.1.1</akka.management.version>
+    <akka.version>2.6.18</akka.version>
+    <akka.http.version>10.2.7</akka.http.version>
+    <akka.management.version>1.1.2</akka.management.version>
   </properties>
 
   <dependencies>
@@ -81,7 +81,7 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.2.5</version>
+      <version>1.2.10</version>
     </dependency>
   </dependencies>
 
