@@ -82,11 +82,7 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-<<<<<<< HEAD
-      <version>1.2.10</version>
-=======
       <version>${logback.version}</version>
->>>>>>> 8f201be9025ce5fcf332f15e23fcf4917b61c737
     </dependency>
   </dependencies>
 
